@@ -14,13 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="LouvorRasgandoCéus" />
     <link rel="icon" type="image/jpeg" href="./logo-igreja.jpg" />
-    <script>
-      // Garante barra final '/' em URLs do GitHub Pages para que o base relativo './' resolva os assets perfeitamente
-      if (window.location.pathname && !window.location.pathname.endsWith('/') && !window.location.pathname.split('/').pop().includes('.')) {
-        window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
-      }
-    </script>
-  </head>
+    </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-sky-500 selection:text-white min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
