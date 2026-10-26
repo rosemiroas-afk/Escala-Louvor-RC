@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: '/Escala-Louvor-RC',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
