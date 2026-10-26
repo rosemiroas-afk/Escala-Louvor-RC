@@ -5,7 +5,8 @@ import {
   MonthlyScale,
   ScaleParticipation,
   MinisterialRole,
-  ALL_ROLES
+  ALL_ROLES,
+  getMemberRoles
 } from '../types/index.ts';
 
 interface GenerationOptions {
@@ -28,9 +29,8 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
       return a.time.localeCompare(b.time);
     });
 
-  // Active members only
-  const activeMembers = members.filter((m) => m.active && m.primaryRole);
-  const memberMap = new Map<string, Member>(activeMembers.map((m) => [m.id, m]));
+  // Active members with at least 1 role configured
+  const activeMembers = members.filter((m) => m.active && getMemberRoles(m).length > 0);
 
   // Availability lookup: Map<cultoId_memberId, AvailabilityStatus>
   const availabilityMap = new Map<string, boolean>();
@@ -63,26 +63,30 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
 
   const generatedParticipations: ScaleParticipation[] = [];
 
-  // Group members by their primary role
+  // Group members by ALL roles they can perform (multi-role support)
   const membersByRole = new Map<MinisterialRole, Member[]>();
   for (const role of ALL_ROLES) {
     membersByRole.set(
       role,
-      activeMembers.filter((m) => m.primaryRole === role)
+      activeMembers.filter((m) => getMemberRoles(m).includes(role))
     );
   }
 
   // Round 1: Priority Guarantee - Ensure every available member gets at least 1 participation if possible
-  // We evaluate all cultos and all roles
-  for (const role of ALL_ROLES) {
+  // We prioritize roles that have fewer available candidates first to prevent bottlenecking
+  const sortedRolesByScarcity = [...ALL_ROLES].sort((rA, rB) => {
+    const countA = membersByRole.get(rA)?.length || 0;
+    const countB = membersByRole.get(rB)?.length || 0;
+    return countA - countB;
+  });
+
+  for (const role of sortedRolesByScarcity) {
     const desiredPerCulto = roleQuotas[role] || 0;
     if (desiredPerCulto <= 0) continue;
 
     const candidates = membersByRole.get(role) || [];
 
-    // For each culto in the month
     for (const culto of monthCultos) {
-      // How many slots for this role have already been filled in this culto?
       const alreadyFilledForRole = generatedParticipations.filter(
         (p) => p.cultoId === culto.id && p.role === role && p.memberId !== null
       ).length;
@@ -102,8 +106,7 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
       });
 
       // Sort eligible zero-count candidates:
-      // Prioritize those with FEWEST total available cultos in the month,
-      // because they have fewer chances to be scheduled elsewhere!
+      // Prioritize those with FEWEST total available cultos in the month (fewer chances to be scheduled elsewhere)
       eligibleZeroCount.sort((a, b) => {
         const aAvailCount = memberAvailableCultos.get(a.id)?.size || 0;
         const bAvailCount = memberAvailableCultos.get(b.id)?.size || 0;
@@ -128,7 +131,7 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
   }
 
   // Round 2: Fair Distribution for remaining slots
-  // Now fill remaining needed slots up to desired quota, prioritizing members with the lowest participation count
+  // Now fill remaining needed slots up to desired quota, prioritizing members with lowest participation count
   for (const role of ALL_ROLES) {
     const desiredPerCulto = roleQuotas[role] || 0;
     if (desiredPerCulto <= 0) continue;
@@ -144,7 +147,6 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
       if (remainingSlotsNeeded <= 0) continue;
 
       for (let slot = 0; slot < remainingSlotsNeeded; slot++) {
-        // Find all available candidates for this culto, not already in this culto
         const eligible = candidates.filter((m) => {
           const isAvail = availabilityMap.get(`${culto.id}_${m.id}`) === true;
           const notInCulto = !cultoMembersAssigned.get(culto.id)?.has(m.id);
@@ -178,7 +180,6 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
           participationsCount.set(chosen.id, (participationsCount.get(chosen.id) || 0) + 1);
         } else {
           // RULE: A falta de integrantes NÃO impede a conclusão da escala!
-          // Mark unfilled slot as "vaga_aberta" (memberId: null)
           generatedParticipations.push({
             id: `part_${culto.id}_${role}_unfilled_${slot}`,
             cultoId: culto.id,
@@ -195,26 +196,17 @@ export function generateMonthlyScale(options: GenerationOptions): MonthlyScale {
   const unallocatedMembers: MonthlyScale['unallocatedMembers'] = [];
 
   for (const member of activeMembers) {
-    const memberRole = member.primaryRole!;
+    const roles = getMemberRoles(member);
     const availableCultosSet = memberAvailableCultos.get(member.id);
     const count = participationsCount.get(member.id) || 0;
 
-    // If member was available for at least one service in this month, but count is 0:
     if (availableCultosSet && availableCultosSet.size > 0 && count === 0) {
-      // Determine precise reason
-      const roleDesired = roleQuotas[memberRole] || 0;
-      let reason = '';
-
-      if (roleDesired <= 0) {
-        reason = `Meta de vagas para a função ${memberRole} está definida como 0 no mês.`;
-      } else {
-        reason = `Todos os cultos em que esteve disponível (${availableCultosSet.size} culto(s)) tiveram suas vagas de ${memberRole} preenchidas por outros integrantes disponíveis com igual ou menor contagem de escalas.`;
-      }
+      const reason = `Disponível em ${availableCultosSet.size} culto(s), mas as vagas das funções (${roles.join(', ')}) foram preenchidas por outros irmãos.`;
 
       unallocatedMembers.push({
         memberId: member.id,
         memberName: member.name,
-        role: memberRole,
+        role: roles[0] || 'Ministro',
         reason,
         availableCount: availableCultosSet.size
       });

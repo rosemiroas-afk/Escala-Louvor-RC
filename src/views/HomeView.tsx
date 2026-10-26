@@ -12,9 +12,9 @@ import {
   HelpCircle,
   FileSpreadsheet
 } from 'lucide-react';
-import { Member, Culto, MonthlyScale, MinisterialRole, ALL_ROLES } from '../types/index.ts';
+import { Member, Culto, MonthlyScale, MinisterialRole, ALL_ROLES, getMemberRoles } from '../types/index.ts';
 import { UserSession, api } from '../api.ts';
-import { RoleBadge } from '../components/RoleBadge.tsx';
+import { RoleBadge, MemberRolesBadges } from '../components/RoleBadge.tsx';
 import { NavTab } from '../components/Navbar.tsx';
 
 interface HomeViewProps {
@@ -46,15 +46,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const latestPublishedScale = scales.find((s) => s.status === 'publicada');
   const latestDraftScale = scales.find((s) => s.status === 'em_elaboracao');
 
-  const handleSaveRole = async (role: MinisterialRole) => {
+  const handleToggleRole = async (role: MinisterialRole) => {
     if (!session?.member) return;
+    const current = getMemberRoles(session.member);
+    const exists = current.includes(role);
+    const updated = exists ? current.filter((r) => r !== role) : [...current, role];
+
     setSavingRole(true);
     setRoleMessage(null);
     try {
-      const res = await api.updateMemberRole(session.member.id, role);
-      setSelectedRole(role);
+      const res = await api.updateMemberRole(session.member.id, updated);
       onMemberUpdated(res.member);
-      setRoleMessage(`Função atualizada para ${role} com sucesso!`);
+      setRoleMessage(
+        updated.length > 0
+          ? `Funções atualizadas (${updated.length} selecionada(s)): ${updated.join(', ')}`
+          : 'Nenhuma função selecionada. Marque as funções que deseja exercer no louvor.'
+      );
     } catch (err: any) {
       setRoleMessage(`Erro: ${err.message}`);
     } finally {
@@ -65,24 +72,45 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white p-6 sm:p-10 shadow-xl border border-indigo-700/30">
-        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute right-10 top-5 opacity-10 hidden md:block">
-          <Music className="w-48 h-48" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-950 via-slate-900 to-indigo-950 text-white p-6 sm:p-10 shadow-xl border border-sky-800/40">
+        <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:block">
+          <div className="w-36 h-36 rounded-full overflow-hidden border-4 border-amber-400/40 shadow-2xl bg-white p-1">
+            <img
+              src="./logo-igreja.jpg"
+              alt="Igreja Rasgando os Céus Bauru"
+              className="w-full h-full object-cover scale-150"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
+              }}
+            />
+          </div>
         </div>
 
         <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-amber-300 text-xs font-semibold mb-4 border border-white/10">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Igreja Evangélica — Gestão Pastoral de Louvor</span>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 shadow-lg bg-white shrink-0 md:hidden flex items-center justify-center">
+              <img
+                src="./logo-igreja.jpg"
+                alt="Logo Igreja Rasgando os Céus Bauru"
+                className="w-full h-full object-cover scale-150"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
+                }}
+              />
+            </div>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/20 backdrop-blur-md text-amber-300 text-xs font-bold border border-sky-400/30">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Igreja Rasgando os Céus — Bauru</span>
+            </div>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-2">
-            Sistema de Escala & Louvor
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight mb-2 leading-tight">
+            Painel de Escala
           </h1>
-          <p className="text-sm sm:text-base text-indigo-100 font-light leading-relaxed mb-6">
+          <p className="text-sm sm:text-base text-sky-100 font-light leading-relaxed mb-6">
             "Cantai louvores ao Senhor, que habita em Sião; anunciai entre os povos as suas obras."{' '}
-            <span className="font-medium text-amber-300">— Salmos 9:11</span>
+            <span className="font-semibold text-amber-300">— Salmos 9:11</span>
           </p>
 
           {/* User state indicator */}
@@ -98,7 +126,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </p>
                 {session.member && (
                   <div className="mt-1">
-                    <RoleBadge role={session.member.primaryRole} size="sm" />
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                    {getMemberRoles(session.member).length > 0 ? (
+                      getMemberRoles(session.member).map((role) => (
+                        <RoleBadge key={role} role={role} size="sm" />
+                      ))
+                    ) : (
+                      <span className="text-xs text-amber-300 font-semibold italic">
+                        Nenhuma função ministerial selecionada
+                      </span>
+                    )}
+                  </div>
                   </div>
                 )}
               </div>
@@ -148,24 +186,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Minha Função Ministerial</span>
-                {session.member.primaryRole ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Minhas Funções Ministeriais (Multi-Função)
+                </h2>
+                {getMemberRoles(session.member).length > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    {getMemberRoles(session.member).length} selecionada(s)
+                  </span>
                 ) : (
-                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    Nenhuma selecionada
+                  </span>
                 )}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {session.member.primaryRole
-                  ? 'Você pode trocar sua função principal quando desejar:'
-                  : 'Atenção: selecione a função que você exerce no ministério de louvor:'}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Você pode selecionar <strong>quantas funções quiser</strong>. O sistema inteligente poderá escalá-lo em qualquer uma das posições que você marcar:
               </p>
             </div>
 
-            {session.member.primaryRole && (
-              <RoleBadge role={session.member.primaryRole} size="lg" />
-            )}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <MemberRolesBadges roles={getMemberRoles(session.member)} size="md" />
+            </div>
           </div>
 
           {roleMessage && (
@@ -175,24 +217,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
             {ALL_ROLES.map((role) => {
-              const isCurrent = session.member?.primaryRole === role;
+              const currentRoles = getMemberRoles(session.member);
+              const isSelected = currentRoles.includes(role);
+
               return (
                 <button
                   key={role}
                   type="button"
                   disabled={savingRole}
-                  onClick={() => handleSaveRole(role)}
-                  className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-2 cursor-pointer ${
-                    isCurrent
-                      ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/50 shadow-xs ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                  onClick={() => handleToggleRole(role)}
+                  className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-2.5 cursor-pointer ${
+                    isSelected
+                      ? 'border-sky-500 bg-sky-50/80 dark:bg-sky-950/50 shadow-xs ring-2 ring-sky-500/30'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/40 dark:bg-slate-800/30'
                   }`}
                 >
-                  <RoleBadge role={role} size="sm" />
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                    {isCurrent ? 'Selecionada' : 'Escolher'}
+                  <div className="flex items-center justify-between">
+                    <RoleBadge role={role} size="sm" />
+                    <span
+                      className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold transition ${
+                        isSelected
+                          ? 'bg-sky-600 text-white'
+                          : 'border border-slate-300 dark:border-slate-600 text-transparent'
+                      }`}
+                    >
+                      ✓
+                    </span>
+                  </div>
+                  <span
+                    className={`text-[11px] font-bold ${
+                      isSelected ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500'
+                    }`}
+                  >
+                    {isSelected ? 'Ativa no louvor' : 'Clique para ativar'}
                   </span>
                 </button>
               );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calendar, Clock, CheckCircle2, Music, UserCheck, AlertCircle } from 'lucide-react';
-import { Member, Culto, MonthlyScale } from '../types/index.ts';
-import { RoleBadge } from '../components/RoleBadge.tsx';
+import { Member, Culto, MonthlyScale, getMemberRoles } from '../types/index.ts';
+import { RoleBadge, MemberRolesBadges } from '../components/RoleBadge.tsx';
 
 interface MyParticipationsViewProps {
   member: Member;
@@ -74,7 +74,7 @@ export const MyParticipationsView: React.FC<MyParticipationsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <RoleBadge role={member.primaryRole} size="lg" />
+          <MemberRolesBadges roles={getMemberRoles(member)} size="md" />
         </div>
       </div>
 
@@ -100,10 +100,10 @@ export const MyParticipationsView: React.FC<MyParticipationsViewProps> = ({
           </div>
           <div>
             <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
-              Função Principal
+              Funções Ativas
             </span>
             <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
-              {member.primaryRole || 'Não informada ainda'}
+              {getMemberRoles(member).join(", ") || 'Não informada ainda'}
             </p>
           </div>
         </div>

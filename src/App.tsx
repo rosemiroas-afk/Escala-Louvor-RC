@@ -40,7 +40,7 @@ export default function App() {
 
     // Register service worker if supported
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
+      navigator.serviceWorker.register('./sw.js').catch((err) => {
         console.log('SW registration note:', err);
       });
     }
@@ -145,6 +145,15 @@ export default function App() {
         </div>
       )}
 
+      {/* GitHub Pages / Static hosting notification */}
+      {api.isStaticMode() && (
+        <div className="bg-indigo-900 text-indigo-100 text-xs font-medium py-1 px-4 text-center border-b border-indigo-800">
+          <span>
+            🌐 <strong>Modo GitHub Pages / Estático ativo:</strong> Todos os 51 integrantes e escalas estão salvos no navegador.
+          </span>
+        </div>
+      )}
+
       {/* Main Navbar */}
       <Navbar
         currentTab={currentTab}
@@ -231,14 +240,21 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 text-slate-500 text-xs py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
-              L
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-full overflow-hidden border border-sky-400 shrink-0 bg-white">
+              <img
+                src="./logo-igreja.jpg"
+                alt="Logo Igreja Rasgando os Céus Bauru"
+                className="w-full h-full object-cover scale-150"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
+                }}
+              />
+            </div>
+            <span className="font-extrabold text-slate-800 dark:text-slate-200">
+              Igreja Rasgando os Céus — Bauru
             </span>
-            <span className="font-bold text-slate-800 dark:text-slate-200">
-              Ministério de Louvor
-            </span>
-            <span>— 51 Integrantes • Gestão & Escala Justa</span>
+            <span>• Painel de Escala (51 Integrantes)</span>
           </div>
 
           <div className="flex items-center gap-3 text-[11px] text-slate-400">

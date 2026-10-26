@@ -2,7 +2,7 @@ import React from 'react';
 import { MinisterialRole } from '../types/index.ts';
 
 interface RoleBadgeProps {
-  role: MinisterialRole | string | null;
+  role?: MinisterialRole | string | null;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -109,5 +109,31 @@ export const RoleBadge: React.FC<RoleBadgeProps> = ({ role, size = 'md', classNa
       <span className="text-sm">{conf.icon}</span>
       <span>{conf.label}</span>
     </span>
+  );
+};
+
+export const MemberRolesBadges: React.FC<{
+  roles?: MinisterialRole[] | null;
+  size?: 'sm' | 'md' | 'lg';
+  maxDisplay?: number;
+}> = ({ roles, size = 'sm', maxDisplay }) => {
+  if (!roles || roles.length === 0) {
+    return <RoleBadge role={null} size={size} />;
+  }
+
+  const toShow = maxDisplay ? roles.slice(0, maxDisplay) : roles;
+  const remaining = maxDisplay ? roles.length - maxDisplay : 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {toShow.map((r) => (
+        <RoleBadge key={r} role={r} size={size} />
+      ))}
+      {remaining > 0 && (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+          +{remaining}
+        </span>
+      )}
+    </div>
   );
 };

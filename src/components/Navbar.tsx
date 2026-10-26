@@ -15,6 +15,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { UserSession } from '../api.ts';
+import { getMemberRoles } from '../types/index.ts';
 import { RoleBadge } from './RoleBadge.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 
@@ -77,20 +78,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-3 cursor-pointer group"
             onClick={() => handleNav('home')}
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition">
-              <Music className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-sky-400 shadow-md shadow-sky-500/20 group-hover:scale-105 transition bg-white flex items-center justify-center shrink-0">
+              <img
+                src="./logo-igreja.jpg"
+                alt="Logo Igreja Rasgando os Céus Bauru"
+                className="w-full h-full object-cover scale-150"
+                onError={(e) => {
+                  // Fallback to local asset path if needed
+                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
+                }}
+              />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 dark:text-white text-base tracking-tight">
-                  Ministério de Louvor
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base tracking-tight leading-tight">
+                  Igreja Rasgando os Céus
                 </span>
-                <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  ESCALA
+                <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  Bauru
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden xs:block">
-                Gestão Compartilhada & Distribuição Justa
+              <p className="text-[11px] text-sky-700 dark:text-sky-400 font-semibold leading-tight">
+                Painel de Escala
               </p>
             </div>
           </div>
@@ -135,7 +144,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {session.member ? session.member.name : 'Administrador'}
                     </p>
                     {session.member ? (
-                      <RoleBadge role={session.member.primaryRole} size="sm" />
+                      <div className="flex flex-wrap gap-1 mt-0.5 max-w-[200px]">
+                        {getMemberRoles(session.member).length > 0 ? (
+                          getMemberRoles(session.member).map((role) => (
+                            <RoleBadge key={role} role={role} size="sm" />
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            Sem função definida
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
                         Liderança
@@ -184,7 +203,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <p className="text-sm font-bold text-slate-900 dark:text-white">
                   {session.member ? session.member.name : 'Administrador da Liderança'}
                 </p>
-                {session.member && <RoleBadge role={session.member.primaryRole} size="sm" />}
+                {session.member && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {getMemberRoles(session.member).map(r => (
+                    <RoleBadge key={r} role={r} size="sm" />
+                  ))}
+                </div>
+              )}
               </div>
               <button
                 onClick={onOpenLogin}

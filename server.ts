@@ -16,36 +16,99 @@ import {
 const app = express();
 app.use(express.json());
 
-// Simple Auth Token Generator / Parser
-// Format: "token_<userType>_<memberId | admin>_<timestamp>"
+// Simple Auth Token Generator / Parser using JSON base64url
 interface AuthTokenPayload {
   userType: 'admin' | 'integrante';
   memberId?: string;
   roleLevel: 'admin' | 'lider' | 'integrante';
 }
 
+function createToken(payload: AuthTokenPayload): string {
+  const data = JSON.stringify({
+    userType: payload.userType,
+    memberId: payload.memberId,
+    roleLevel: payload.roleLevel,
+    ts: Date.now()
+  });
+  return `tok_${Buffer.from(data, 'utf-8').toString('base64url')}`;
+}
+
 function parseToken(authHeader?: string): AuthTokenPayload | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) return null;
+
   try {
-    const parts = token.split('_');
-    if (parts[0] !== 'tok') return null;
-    const userType = parts[1] as 'admin' | 'integrante';
-    const identifier = parts[2];
-    const roleLevel = parts[3] as 'admin' | 'lider' | 'integrante';
-    return {
-      userType,
-      memberId: userType === 'integrante' ? identifier : undefined,
-      roleLevel
-    };
-  } catch {
+    if (token.startsWith('tok_')) {
+      const b64 = token.slice(4);
+      // 1. Try decoding JSON base64url
+      try {
+        const jsonStr = Buffer.from(b64, 'base64url').toString('utf-8');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && (parsed.roleLevel || parsed.userType)) {
+          const userType = parsed.userType || (parsed.roleLevel === 'admin' ? 'admin' : 'integrante');
+          let roleLevel: 'admin' | 'lider' | 'integrante' =
+            parsed.roleLevel || (parsed.userType === 'admin' ? 'admin' : 'integrante');
+
+          // Check database to ensure fresh roleLevel
+          if (parsed.memberId) {
+            const db = dbService.get();
+            const m = db.members.find((member) => member.id === parsed.memberId);
+            if (m && (m.roleLevel === 'admin' || m.roleLevel === 'lider')) {
+              roleLevel = m.roleLevel;
+            }
+          }
+
+          return {
+            userType,
+            memberId: parsed.memberId,
+            roleLevel
+          };
+        }
+      } catch {
+        // Fallback to legacy string split format
+      }
+
+      // 2. Legacy string split format (tok_integrante_m_36_admin_<ts> etc.)
+      const parts = token.split('_');
+      if (parts[1] === 'admin') {
+        return { userType: 'admin', roleLevel: 'admin' };
+      }
+      if (parts[1] === 'integrante') {
+        let memberId: string | undefined;
+        let roleLevel: 'admin' | 'lider' | 'integrante' = 'integrante';
+
+        if (parts.length >= 6) {
+          const rawRole = parts[parts.length - 2];
+          roleLevel = rawRole === 'admin' || rawRole === 'lider' ? rawRole : 'integrante';
+          memberId = parts.slice(2, parts.length - 2).join('_');
+        } else if (parts.length === 5) {
+          memberId = parts[2];
+          const rawRole = parts[3];
+          roleLevel = rawRole === 'admin' || rawRole === 'lider' ? rawRole : 'integrante';
+        }
+
+        // Cross-reference with DB
+        if (memberId) {
+          const db = dbService.get();
+          const m = db.members.find((member) => member.id === memberId);
+          if (m && (m.roleLevel === 'admin' || m.roleLevel === 'lider')) {
+            roleLevel = m.roleLevel;
+          }
+        }
+
+        return {
+          userType: 'integrante',
+          memberId,
+          roleLevel
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao processar token de autenticação:', err);
     return null;
   }
-}
-
-function createToken(payload: AuthTokenPayload): string {
-  const id = payload.memberId || 'admin';
-  return `tok_${payload.userType}_${id}_${payload.roleLevel}_${Date.now()}`;
+  return null;
 }
 
 // Auth Middleware
@@ -54,13 +117,35 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!user) {
     return res.status(401).json({ error: 'Acesso não autorizado. Faça login.' });
   }
+  if (user.memberId) {
+    const db = dbService.get();
+    const m = db.members.find((member) => member.id === user.memberId);
+    if (m && (m.roleLevel === 'admin' || m.roleLevel === 'lider')) {
+      user.roleLevel = m.roleLevel;
+    }
+  }
   (req as any).user = user;
   next();
 }
 
 function requireAdminOrLeader(req: Request, res: Response, next: NextFunction) {
   const user = parseToken(req.headers.authorization);
-  if (!user || (user.roleLevel !== 'admin' && user.roleLevel !== 'lider')) {
+  if (!user) {
+    return res.status(401).json({ error: 'Acesso não autorizado. Faça login como Líder ou Administrador.' });
+  }
+
+  // Allow if token has admin/lider role OR member in database has admin/lider role
+  let isAdmin = user.userType === 'admin' || user.roleLevel === 'admin' || user.roleLevel === 'lider';
+  if (!isAdmin && user.memberId) {
+    const db = dbService.get();
+    const m = db.members.find((member) => member.id === user.memberId);
+    if (m && (m.roleLevel === 'admin' || m.roleLevel === 'lider')) {
+      isAdmin = true;
+      user.roleLevel = m.roleLevel;
+    }
+  }
+
+  if (!isAdmin) {
     return res.status(403).json({ error: 'Apenas Administradores ou Líderes podem realizar esta ação.' });
   }
   (req as any).user = user;
@@ -167,7 +252,8 @@ app.post('/api/auth/set-pin', requireAuth, (req: Request, res: Response) => {
   const { pin, memberId } = req.body;
   const db = dbService.get();
 
-  const targetId = user.userType === 'admin' ? memberId : user.memberId;
+  const isSuper = user.userType === 'admin' || user.roleLevel === 'admin' || user.roleLevel === 'lider';
+  const targetId = isSuper && memberId ? memberId : (user.memberId || memberId);
   const member = db.members.find((m) => m.id === targetId);
   if (!member) {
     return res.status(404).json({ error: 'Integrante não encontrado.' });
@@ -195,15 +281,15 @@ app.get('/api/members', (req: Request, res: Response) => {
   res.json(safeMembers);
 });
 
-// Member sets their own primary ministerial role
+// Member sets their own ministerial roles
 app.put('/api/members/:id/role', requireAuth, (req: Request, res: Response) => {
   const user = (req as any).user as AuthTokenPayload;
   const { id } = req.params;
-  const { primaryRole, contact } = req.body;
+  const { roles, primaryRole, contact } = req.body;
   const db = dbService.get();
 
-  // Regular integrante can only modify their own profile
-  if (user.roleLevel === 'integrante' && user.memberId !== id) {
+  const isSuper = user.userType === 'admin' || user.roleLevel === 'admin' || user.roleLevel === 'lider';
+  if (!isSuper && user.memberId !== id) {
     return res.status(403).json({ error: 'Você só pode alterar seu próprio cadastro.' });
   }
 
@@ -212,11 +298,18 @@ app.put('/api/members/:id/role', requireAuth, (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Integrante não encontrado.' });
   }
 
-  if (primaryRole && !ALL_ROLES.includes(primaryRole)) {
-    return res.status(400).json({ error: 'Função ministerial inválida.' });
+  if (roles !== undefined) {
+    const validRoles = (Array.isArray(roles) ? roles : [roles]).filter((r) => ALL_ROLES.includes(r));
+    member.roles = validRoles;
+    member.primaryRole = validRoles[0] || null;
+  } else if (primaryRole !== undefined) {
+    if (primaryRole && !ALL_ROLES.includes(primaryRole)) {
+      return res.status(400).json({ error: 'Função ministerial inválida.' });
+    }
+    member.primaryRole = primaryRole;
+    member.roles = primaryRole ? [primaryRole] : [];
   }
 
-  if (primaryRole !== undefined) member.primaryRole = primaryRole;
   if (contact !== undefined) member.contact = contact;
   member.updatedAt = new Date().toISOString();
 
@@ -224,10 +317,10 @@ app.put('/api/members/:id/role', requireAuth, (req: Request, res: Response) => {
   res.json({ success: true, member });
 });
 
-// Admin updates a member (name, active, roleLevel, primaryRole, reset PIN)
+// Admin updates a member (name, active, roleLevel, roles/primaryRole, reset PIN)
 app.put('/api/members/:id', requireAdminOrLeader, (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, active, roleLevel, primaryRole, contact, resetPin } = req.body;
+  const { name, active, roleLevel, roles, primaryRole, contact, resetPin } = req.body;
   const db = dbService.get();
 
   const member = db.members.find((m) => m.id === id);
@@ -238,7 +331,16 @@ app.put('/api/members/:id', requireAdminOrLeader, (req: Request, res: Response) 
   if (name !== undefined && name.trim()) member.name = name.trim().toUpperCase();
   if (active !== undefined) member.active = Boolean(active);
   if (roleLevel !== undefined) member.roleLevel = roleLevel;
-  if (primaryRole !== undefined) member.primaryRole = primaryRole;
+
+  if (roles !== undefined) {
+    const validRoles = (Array.isArray(roles) ? roles : [roles]).filter((r) => ALL_ROLES.includes(r));
+    member.roles = validRoles;
+    member.primaryRole = validRoles[0] || null;
+  } else if (primaryRole !== undefined) {
+    member.primaryRole = primaryRole;
+    member.roles = primaryRole ? [primaryRole] : [];
+  }
+
   if (contact !== undefined) member.contact = contact;
   if (resetPin) member.pin = null;
 
@@ -250,18 +352,25 @@ app.put('/api/members/:id', requireAdminOrLeader, (req: Request, res: Response) 
 
 // Admin creates a new member
 app.post('/api/members', requireAdminOrLeader, (req: Request, res: Response) => {
-  const { name, primaryRole, contact, roleLevel } = req.body;
+  const { name, roles, primaryRole, contact, roleLevel } = req.body;
   const db = dbService.get();
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'O nome é obrigatório.' });
   }
 
+  const memberRoles: MinisterialRole[] = roles
+    ? roles.filter((r: any) => ALL_ROLES.includes(r))
+    : primaryRole
+    ? [primaryRole]
+    : [];
+
   const now = new Date().toISOString();
   const newMember: Member = {
     id: `m_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     name: name.trim().toUpperCase(),
-    primaryRole: primaryRole || null,
+    roles: memberRoles,
+    primaryRole: memberRoles[0] || null,
     secondaryRoles: [],
     active: true,
     contact: contact || '',
@@ -390,8 +499,9 @@ app.post('/api/availabilities', requireAuth, (req: Request, res: Response) => {
   };
   const db = dbService.get();
 
-  // Enforce access control: members can only save for themselves
-  if (user.roleLevel === 'integrante' && user.memberId !== memberId) {
+  // Enforce access control: members can only save for themselves unless admin/leader
+  const isSuper = user.userType === 'admin' || user.roleLevel === 'admin' || user.roleLevel === 'lider';
+  if (!isSuper && user.memberId !== memberId) {
     return res.status(403).json({ error: 'Você só pode salvar sua própria disponibilidade.' });
   }
 
@@ -400,9 +510,16 @@ app.post('/api/availabilities', requireAuth, (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Integrante não encontrado.' });
   }
 
-  if (!member.primaryRole) {
+  const memberRoles =
+    member.roles && member.roles.length > 0
+      ? member.roles
+      : member.primaryRole
+      ? [member.primaryRole]
+      : [];
+
+  if (memberRoles.length === 0) {
     return res.status(400).json({
-      error: 'Selecione sua função ministerial antes de salvar sua disponibilidade.'
+      error: 'Selecione ao menos uma função ministerial antes de salvar sua disponibilidade.'
     });
   }
 

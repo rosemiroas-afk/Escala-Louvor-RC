@@ -42,7 +42,8 @@ export type AvailabilityStatus = 'disponivel' | 'indisponivel' | 'nao_informado'
 export interface Member {
   id: string;
   name: string;
-  primaryRole: MinisterialRole | null;
+  roles: MinisterialRole[]; // Multiple ministerial roles allowed
+  primaryRole?: MinisterialRole | null; // Kept for backwards compatibility
   secondaryRoles?: MinisterialRole[];
   active: boolean;
   contact?: string;
@@ -50,6 +51,21 @@ export interface Member {
   roleLevel: UserRoleLevel;
   createdAt: string;
   updatedAt: string;
+}
+
+export function getMemberRoles(m?: Partial<Member> | null): MinisterialRole[] {
+  if (!m) return [];
+  if (Array.isArray(m.roles) && m.roles.length > 0) {
+    return m.roles;
+  }
+  if (m.primaryRole) {
+    const combined = [m.primaryRole];
+    if (Array.isArray(m.secondaryRoles)) {
+      combined.push(...m.secondaryRoles);
+    }
+    return Array.from(new Set(combined));
+  }
+  return [];
 }
 
 export interface Culto {

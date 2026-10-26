@@ -11,7 +11,7 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-import { Member, MinisterialRole, ALL_ROLES } from '../types/index.ts';
+import { Member, MinisterialRole, ALL_ROLES, getMemberRoles } from '../types/index.ts';
 import { api, UserSession } from '../api.ts';
 import { RoleBadge } from './RoleBadge.tsx';
 
@@ -130,13 +130,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Identificação & Acesso
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Selecione seu perfil para acessar o Ministério de Louvor
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-sky-400 shrink-0 bg-white">
+              <img
+                src="./logo-igreja.jpg"
+                alt="Logo Igreja Rasgando os Céus Bauru"
+                className="w-full h-full object-cover scale-150"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
+                }}
+              />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight">
+                Igreja Rasgando os Céus — Bauru
+              </h2>
+              <p className="text-[11px] text-sky-700 dark:text-sky-400 font-semibold">
+                Painel de Escala
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -284,7 +296,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                                 </span>
                               )}
-                              <RoleBadge role={m.primaryRole} size="sm" />
+                              <div className="flex flex-wrap gap-1 justify-end max-w-[140px]">
+                                {getMemberRoles(m).map((role) => (
+                                  <RoleBadge key={role} role={role} size="sm" />
+                                ))}
+                              </div>
                               <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition" />
                             </div>
                           </button>
@@ -308,7 +324,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                             <h3 className="font-bold text-slate-900 dark:text-white">
                               {selectedMember.name}
                             </h3>
-                            <RoleBadge role={selectedMember.primaryRole} size="sm" />
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {getMemberRoles(selectedMember).length > 0 ? (
+                                getMemberRoles(selectedMember).map((role) => (
+                                  <RoleBadge key={role} role={role} size="sm" />
+                                ))
+                              ) : (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400">Sem função definida</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <button

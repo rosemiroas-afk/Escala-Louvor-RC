@@ -4,20 +4,15 @@ import {
   Search,
   Plus,
   Edit2,
-  Trash2,
-  CheckCircle,
-  XCircle,
   Phone,
   Lock,
-  RotateCcw,
   AlertCircle,
   X,
   Save,
-  ShieldCheck,
-  UserCheck
+  Check
 } from 'lucide-react';
-import { Member, MinisterialRole, UserRoleLevel, ALL_ROLES } from '../types/index.ts';
-import { RoleBadge } from '../components/RoleBadge.tsx';
+import { Member, MinisterialRole, UserRoleLevel, ALL_ROLES, getMemberRoles } from '../types/index.ts';
+import { RoleBadge, MemberRolesBadges } from '../components/RoleBadge.tsx';
 import { api } from '../api.ts';
 
 interface MembersViewProps {
@@ -29,13 +24,12 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('todos');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'inativos'>('todos');
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<(Member & { hasPin?: boolean }) | null>(null);
 
   // Form states
   const [name, setName] = useState('');
-  const [primaryRole, setPrimaryRole] = useState<MinisterialRole | ''>('');
+  const [selectedRoles, setSelectedRoles] = useState<MinisterialRole[]>([]);
   const [contact, setContact] = useState('');
   const [roleLevel, setRoleLevel] = useState<UserRoleLevel>('integrante');
   const [active, setActive] = useState(true);
@@ -45,12 +39,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
 
   const filteredMembers = members.filter((m) => {
     const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const mRoles = getMemberRoles(m);
     const matchesRole =
       roleFilter === 'todos'
         ? true
         : roleFilter === 'sem_funcao'
-        ? !m.primaryRole
-        : m.primaryRole === roleFilter;
+        ? mRoles.length === 0
+        : mRoles.includes(roleFilter as MinisterialRole);
+
     const matchesStatus =
       statusFilter === 'todos'
         ? true
@@ -64,7 +60,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
   const handleOpenCreate = () => {
     setEditingMember(null);
     setName('');
-    setPrimaryRole('');
+    setSelectedRoles([]);
     setContact('');
     setRoleLevel('integrante');
     setActive(true);
@@ -76,13 +72,19 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
   const handleOpenEdit = (m: Member & { hasPin?: boolean }) => {
     setEditingMember(m);
     setName(m.name);
-    setPrimaryRole(m.primaryRole || '');
+    setSelectedRoles(getMemberRoles(m));
     setContact(m.contact || '');
     setRoleLevel(m.roleLevel);
     setActive(m.active);
     setResetPin(false);
     setError(null);
     setIsModalOpen(true);
+  };
+
+  const handleToggleFormRole = (r: MinisterialRole) => {
+    setSelectedRoles((prev) =>
+      prev.includes(r) ? prev.filter((role) => role !== r) : [...prev, r]
+    );
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -94,11 +96,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
 
     setSaving(true);
     setError(null);
+
     try {
       if (editingMember) {
         await api.updateMemberAdmin(editingMember.id, {
           name,
-          primaryRole: primaryRole ? (primaryRole as MinisterialRole) : null,
+          roles: selectedRoles,
+          primaryRole: selectedRoles[0] || null,
           contact,
           roleLevel,
           active,
@@ -107,11 +111,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
       } else {
         await api.createMember({
           name,
-          primaryRole: primaryRole ? (primaryRole as MinisterialRole) : undefined,
+          roles: selectedRoles,
+          primaryRole: selectedRoles[0] || undefined,
           contact,
           roleLevel
         });
       }
+
       setIsModalOpen(false);
       onMembersUpdated();
     } catch (err: any) {
@@ -178,7 +184,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
           >
             <option value="todos">Todas as Funções</option>
             <option value="sem_funcao">Sem Função Selecionada</option>
@@ -194,7 +200,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
           >
             <option value="todos">Todos os Status</option>
             <option value="ativos">Apenas Ativos</option>
@@ -205,83 +211,86 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
 
       {/* Members Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredMembers.map((m, idx) => (
-          <div
-            key={m.id}
-            className={`p-4 rounded-2xl border transition bg-white dark:bg-slate-900 flex flex-col justify-between gap-3 ${
-              !m.active
-                ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30'
-                : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 shadow-xs'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-slate-700 dark:text-slate-200 shrink-0">
-                  {m.name[0]}
-                </span>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                      {m.name}
-                    </h3>
-                    {m.roleLevel === 'admin' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 font-bold">
-                        Admin
-                      </span>
-                    )}
+        {filteredMembers.map((m) => {
+          const mRoles = getMemberRoles(m);
+          return (
+            <div
+              key={m.id}
+              className={`p-4 rounded-2xl border transition bg-white dark:bg-slate-900 flex flex-col justify-between gap-3 ${
+                !m.active
+                  ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 shadow-xs'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-slate-700 dark:text-slate-200 shrink-0">
+                    {m.name[0]}
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                        {m.name}
+                      </h3>
+                      {m.roleLevel === 'admin' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 font-bold">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1">
+                      <MemberRolesBadges roles={mRoles} />
+                    </div>
                   </div>
-                  <div className="mt-1">
-                    <RoleBadge role={m.primaryRole} size="sm" />
-                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {m.hasPin ? (
+                    <span title="PIN cadastrado">
+                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                    </span>
+                  ) : (
+                    <span title="Sem PIN individual">
+                      <Lock className="w-3.5 h-3.5 text-slate-300" />
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
-                {m.hasPin ? (
-                  <span title="PIN cadastrado">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                  </span>
-                ) : (
-                  <span title="Sem PIN individual">
-                    <Lock className="w-3.5 h-3.5 text-slate-300" />
-                  </span>
-                )}
-              </div>
-            </div>
+              {m.contact && (
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  <Phone className="w-3 h-3 text-slate-400" />
+                  <span>{m.contact}</span>
+                </div>
+              )}
 
-            {m.contact && (
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                <Phone className="w-3 h-3 text-slate-400" />
-                <span>{m.contact}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleToggleActive(m)}
-                className={`text-[11px] font-semibold cursor-pointer ${
-                  m.active
-                    ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                {m.active ? '● Ativo' : '○ Inativo'}
-              </button>
-
-              <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-xs">
                 <button
                   type="button"
-                  onClick={() => handleOpenEdit(m)}
-                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                  title="Editar cadastro"
+                  onClick={() => handleToggleActive(m)}
+                  className={`text-[11px] font-semibold cursor-pointer ${
+                    m.active
+                      ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
                 >
-                  <Edit2 className="w-3.5 h-3.5" />
+                  {m.active ? '● Ativo' : '○ Inativo'}
                 </button>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(m)}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                    title="Editar cadastro"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {filteredMembers.length === 0 && (
@@ -293,14 +302,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
       {/* Modal Edit / Create Member */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="font-bold text-slate-900 dark:text-white text-base">
                 {editingMember ? `Editar ${editingMember.name}` : 'Cadastrar Integrante'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -313,7 +322,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
               </div>
             )}
 
-            <form onSubmit={handleSave} className="space-y-3">
+            <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Nome do Integrante (Letras maiúsculas):
@@ -328,25 +337,52 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                 />
               </div>
 
+              {/* Multi-role selector */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Função Ministerial Principal:
-                </label>
-                <select
-                  value={primaryRole}
-                  onChange={(e) => setPrimaryRole(e.target.value as any)}
-                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
-                >
-                  <option value="">Não atribuída (O integrante escolhe)</option>
-                  {ALL_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Funções Ministeriais ({selectedRoles.length} selecionada{selectedRoles.length === 1 ? '' : 's'}):
+                  </label>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Selecione quantas quiser
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {ALL_ROLES.map((r) => {
+                    const isSelected = selectedRoles.includes(r);
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => handleToggleFormRole(r)}
+                        className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer text-left ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                        }`}
+                      >
+                        <span className="truncate">{r}</span>
+                        <span
+                          className={`w-4 h-4 rounded text-[10px] flex items-center justify-center shrink-0 ml-1.5 ${
+                            isSelected
+                              ? 'bg-white text-indigo-600 font-extrabold'
+                              : 'border border-slate-300 dark:border-slate-600'
+                          }`}
+                        >
+                          {isSelected ? '✓' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedRoles.length === 0 && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
+                    Nenhuma função atribuída. O integrante poderá escolher suas próprias funções pelo celular.
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Telefone / WhatsApp:
@@ -355,7 +391,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                     type="text"
                     value={contact}
                     onChange={(e) => setContact(e.target.value)}
-                    placeholder="(11) 99999-9999"
+                    placeholder="(14) 99999-9999"
                     className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
                   />
                 </div>
@@ -367,7 +403,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                   <select
                     value={roleLevel}
                     onChange={(e) => setRoleLevel(e.target.value as any)}
-                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
                   >
                     <option value="integrante">Integrante Comum</option>
                     <option value="lider">Líder do Ministério</option>
@@ -382,7 +418,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                     type="checkbox"
                     checked={active}
                     onChange={(e) => setActive(e.target.checked)}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                   />
                   <span>Cadastro ativo no Ministério de Louvor</span>
                 </label>
@@ -393,14 +429,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                       type="checkbox"
                       checked={resetPin}
                       onChange={(e) => setResetPin(e.target.checked)}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
                     />
                     <span>Redefinir PIN de acesso (se o integrante esqueceu)</span>
                   </label>
                 )}
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

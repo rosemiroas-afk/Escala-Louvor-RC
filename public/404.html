@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Painel de Escalar Ministério de Louvor - Igreja Rasgando os Céus Bauru</title>
+    <script>
+      // Redireciona 404 do GitHub Pages para a raiz da SPA preservando sub-rotas
+      sessionStorage.redirect = location.href;
+      var path = location.pathname;
+      var segments = path.split('/').filter(Boolean);
+      // Se estiver em https://usuario.github.io/repo/subrota -> volta para /repo/
+      if (segments.length > 1) {
+        location.replace('/' + segments[0] + '/');
+      } else {
+        location.replace('/');
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecionando para o Painel de Escalar Ministério de Louvor...</p>
+  </body>
+</html>

@@ -158,6 +158,7 @@ function getInitialDatabase(): DatabaseSchema {
     return {
       id: `m_${index + 1}`,
       name,
+      roles: [], // Multiple ministerial roles allowed
       primaryRole: null, // STRICT REQUIREMENT: No pre-assigned role, each member selects theirs
       secondaryRoles: [],
       active: true,
@@ -198,8 +199,13 @@ class DatabaseService {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
-        // Ensure all fields exist
+        // Ensure all fields exist and roles array is populated
         if (parsed.members && parsed.cultos && parsed.availabilities) {
+          parsed.members.forEach((m: any) => {
+            if (!Array.isArray(m.roles)) {
+              m.roles = m.primaryRole ? [m.primaryRole] : [];
+            }
+          });
           return parsed;
         }
       }

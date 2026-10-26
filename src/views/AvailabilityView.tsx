@@ -13,9 +13,9 @@ import {
   User,
   ArrowRight
 } from 'lucide-react';
-import { Culto, Member, MinisterialRole, Availability, ALL_ROLES } from '../types/index.ts';
+import { Culto, Member, MinisterialRole, Availability, ALL_ROLES, getMemberRoles } from '../types/index.ts';
 import { UserSession, api } from '../api.ts';
-import { RoleBadge } from '../components/RoleBadge.tsx';
+import { RoleBadge, MemberRolesBadges } from '../components/RoleBadge.tsx';
 
 interface AvailabilityViewProps {
   session: UserSession | null;
@@ -101,9 +101,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({
       return;
     }
 
-    if (!session.member.primaryRole) {
+    if (getMemberRoles(session.member).length === 0) {
       setMessage({
-        text: 'Por favor, escolha sua função ministerial antes de salvar sua disponibilidade.',
+        text: 'Por favor, escolha ao menos uma função ministerial antes de salvar sua disponibilidade.',
         type: 'error'
       });
       return;
@@ -136,14 +136,19 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({
     }
   };
 
-  const handleRoleChange = async (role: MinisterialRole) => {
+  const handleToggleRole = async (role: MinisterialRole) => {
     if (!session?.member) return;
+    const current = getMemberRoles(session.member);
+    const exists = current.includes(role);
+    const updated = exists ? current.filter((r) => r !== role) : [...current, role];
     try {
-      const res = await api.updateMemberRole(session.member.id, role);
-      setSelectedRole(role);
+      const res = await api.updateMemberRole(session.member.id, updated);
       onMemberUpdated(res.member);
       setMessage({
-        text: `Função definida como ${role}! Agora você já pode salvar sua disponibilidade.`,
+        text:
+          updated.length > 0
+            ? `Funções atualizadas (${updated.length} ativa(s)): ${updated.join(', ')}`
+            : 'Nenhuma função selecionada. Escolha ao menos uma função.',
         type: 'success'
       });
     } catch (err: any) {
@@ -225,40 +230,57 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({
 
       {/* Function / Role Alert */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
           <div>
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Função Ministerial para a Escala
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Suas Funções Ministeriais
+              </h3>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                Selecione quantas quiser
+              </span>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              A escala automática utilizará esta função para preencher suas vagas:
+              A escala inteligente poderá escalar você em qualquer uma das funções selecionadas:
             </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <RoleBadge role={session.member.primaryRole} size="lg" />
-            <select
-              value={session.member.primaryRole || ''}
-              onChange={(e) => handleRoleChange(e.target.value as MinisterialRole)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
-            >
-              <option value="" disabled>
-                Selecione sua função
-              </option>
-              {ALL_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
-        {!session.member.primaryRole && (
+        {/* Multi-role selection pills/buttons */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {ALL_ROLES.map((role) => {
+            const isSelected = getMemberRoles(session.member).includes(role);
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => handleToggleRole(role)}
+                className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer border ${
+                  isSelected
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                }`}
+              >
+                <span>{role}</span>
+                <span
+                  className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] ${
+                    isSelected
+                      ? 'bg-white text-indigo-600 font-extrabold'
+                      : 'border border-slate-300 dark:border-slate-600'
+                  }`}
+                >
+                  {isSelected ? '✓' : ''}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {getMemberRoles(session.member).length === 0 && (
           <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
             <span>
-              <strong>Atenção:</strong> Selecione sua função acima antes de salvar a disponibilidade.
+              <strong>Atenção:</strong> Selecione pelo menos uma função acima antes de salvar a disponibilidade.
             </span>
           </div>
         )}

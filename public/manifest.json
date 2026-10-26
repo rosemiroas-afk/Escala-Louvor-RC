@@ -1,17 +1,23 @@
 {
-  "id": "/",
-  "name": "Sistema de Gestão e Escala - Ministério de Louvor",
-  "short_name": "EscalaLouvor",
-  "description": "Gestão de integrantes, disponibilidade mensal e geração equilibrada da escala de louvor.",
-  "start_url": "/",
-  "scope": "/",
+  "id": "./",
+  "name": "Painel de Escalar Ministério de Louvor - Igreja Rasgando os Céus Bauru",
+  "short_name": "LouvorIRC",
+  "description": "Painel de Escalar Ministério de Louvor da Igreja Rasgando os Céus Bauru. Gestão de integrantes e escala equilibrada.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
-  "theme_color": "#4f46e5",
+  "theme_color": "#0284c7",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "./logo-igreja.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
