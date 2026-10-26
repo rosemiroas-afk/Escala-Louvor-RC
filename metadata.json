@@ -1,0 +1,7 @@
+{
+  "name": "Sistema de Gestão e Escala - Ministério de Louvor",
+  "description": "Sistema completo para gestão de integrantes, disponibilidade e geração equilibrada da escala do Ministério de Louvor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
