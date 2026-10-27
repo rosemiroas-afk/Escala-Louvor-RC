@@ -78,17 +78,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-3 cursor-pointer group"
             onClick={() => handleNav('home')}
           >
-            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-sky-400 shadow-md shadow-sky-500/20 group-hover:scale-105 transition bg-white flex items-center justify-center shrink-0">
-              <img
-                src="./logo-igreja.jpg"
-                alt="Logo Igreja Rasgando os Céus Bauru"
-                className="w-full h-full object-cover scale-150"
-                onError={(e) => {
-                  // Fallback to local asset path if needed
-                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
-                }}
-              />
-            </div>
+            <img
+              src="./logo-igreja.png"
+              alt="Logo Igreja Rasgando os Céus Bauru"
+              className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition drop-shadow-sm"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = './logo-igreja.jpg';
+              }}
+            />
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base tracking-tight leading-tight">

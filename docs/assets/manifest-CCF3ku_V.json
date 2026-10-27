@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Painel de Escala - Igreja Rasgando os Céus Bauru",
+  "short_name": "LouvorIRC",
+  "description": "Painel de Escala da Igreja Rasgando os Céus Bauru. Gestão de integrantes e escala equilibrada.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "./logo-igreja.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

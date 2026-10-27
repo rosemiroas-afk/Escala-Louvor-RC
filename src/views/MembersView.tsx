@@ -9,7 +9,9 @@ import {
   AlertCircle,
   X,
   Save,
-  Check
+  Check,
+  KeyRound,
+  RotateCcw
 } from 'lucide-react';
 import { Member, MinisterialRole, UserRoleLevel, ALL_ROLES, getMemberRoles } from '../types/index.ts';
 import { RoleBadge, MemberRolesBadges } from '../components/RoleBadge.tsx';
@@ -137,6 +139,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
       onMembersUpdated();
     } catch (err: any) {
       alert(err.message || 'Erro ao alterar situação.');
+    }
+  };
+
+  const handleResetPin = async (m: Member & { hasPin?: boolean }) => {
+    if (!window.confirm(`Deseja resetar o PIN de ${m.name} para a senha padrão 1234?`)) return;
+    try {
+      const res = await api.resetMemberPin(m.id);
+      alert(res.message || `PIN de ${m.name} resetado para o padrão 1234 com sucesso!`);
+      onMembersUpdated();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao resetar PIN.');
     }
   };
 
@@ -277,7 +290,16 @@ export const MembersView: React.FC<MembersViewProps> = ({ members, onMembersUpda
                   {m.active ? '● Ativo' : '○ Inativo'}
                 </button>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleResetPin(m)}
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50 rounded-lg transition cursor-pointer"
+                    title="Resetar PIN deste integrante para o padrão inicial 1234"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Resetar PIN (1234)</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(m)}

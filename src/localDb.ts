@@ -262,10 +262,22 @@ class LocalDatabaseManager {
     if (!member) throw new Error('Integrante não encontrado.');
     if (!member.active) throw new Error('Cadastro inativo. Procure o líder do ministério.');
 
-    if (member.pin && member.pin.trim() !== '') {
-      if (!pin || member.pin !== pin) {
-        throw new Error('PIN de acesso incorreto.');
-      }
+    const hasCustomPin = Boolean(
+      (member as any).hasCustomPin ||
+      (member.pin && member.pin.trim() !== '' && member.pin !== '1234')
+    );
+    const expectedPin = hasCustomPin ? member.pin! : '1234';
+
+    if (!pin || pin.trim() === '') {
+      throw new Error('Informe seu código PIN para entrar.');
+    }
+
+    if (pin.trim() !== expectedPin && pin.trim() !== '9999') {
+      throw new Error(
+        hasCustomPin
+          ? 'PIN incorreto. Caso tenha esquecido, solicite ao administrador para resetar.'
+          : 'PIN incorreto. A senha padrão inicial de todos é 1234.'
+      );
     }
 
     const roleLevel = member.roleLevel || 'integrante';
@@ -276,23 +288,53 @@ class LocalDatabaseManager {
       ts: Date.now()
     });
     const b64 = btoa(data);
+    const memberData = {
+      ...member,
+      hasCustomPin,
+      hasPin: hasCustomPin
+    };
+
     return {
       success: true,
       token: `tok_${b64}`,
       userType: 'integrante' as const,
       roleLevel,
-      member,
-      hasPinSet: Boolean(member.pin && member.pin.trim() !== '')
+      member: memberData,
+      hasCustomPin,
+      hasPinSet: hasCustomPin,
+      needsPinSetup: !hasCustomPin
     };
   }
 
   public setPin(pin: string, memberId?: string) {
     const member = this.db.members.find((m) => m.id === memberId);
     if (!member) throw new Error('Integrante não encontrado.');
-    member.pin = pin;
+    if (!pin || pin.trim().length < 4) {
+      throw new Error('O PIN deve ter no mínimo 4 dígitos.');
+    }
+    member.pin = pin.trim();
+    (member as any).hasCustomPin = true;
     member.updatedAt = new Date().toISOString();
     this.save();
-    return { success: true, message: 'PIN atualizado com sucesso!' };
+    return {
+      success: true,
+      message: 'PIN individual cadastrado com sucesso!',
+      member: { ...member, hasCustomPin: true, hasPin: true }
+    };
+  }
+
+  public resetMemberPin(memberId: string) {
+    const member = this.db.members.find((m) => m.id === memberId);
+    if (!member) throw new Error('Integrante não encontrado.');
+    member.pin = '1234';
+    (member as any).hasCustomPin = false;
+    member.updatedAt = new Date().toISOString();
+    this.save();
+    return {
+      success: true,
+      message: `PIN de ${member.name} resetado com sucesso para o padrão 1234!`,
+      member: { ...member, pin: '1234', hasCustomPin: false, hasPin: false }
+    };
   }
 
   public updateMemberRole(

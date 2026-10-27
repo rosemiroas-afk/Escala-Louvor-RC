@@ -30,12 +30,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 }) => {
   const [tab, setTab] = useState<'integrante' | 'admin'>('integrante');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMember, setSelectedMember] = useState<(Member & { hasPin?: boolean }) | null>(null);
+  const [selectedMember, setSelectedMember] = useState<(Member & { hasPin?: boolean; hasCustomPin?: boolean }) | null>(null);
   const [pin, setPin] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [newPin, setNewPin] = useState('');
+  const [confirmNewPin, setConfirmNewPin] = useState('');
   const [showSetPinPrompt, setShowSetPinPrompt] = useState(false);
   const [loggedInSession, setLoggedInSession] = useState<UserSession | null>(null);
 
@@ -45,7 +46,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     m.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleMemberSelect = (m: Member & { hasPin?: boolean }) => {
+  const handleMemberSelect = (m: Member & { hasPin?: boolean; hasCustomPin?: boolean }) => {
     setSelectedMember(m);
     setPin('');
     setError(null);
@@ -53,11 +54,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const handleMemberLogin = async () => {
     if (!selectedMember) return;
+    const cleanPin = pin.trim();
+    if (!cleanPin) {
+      setError('Digite seu código PIN para entrar (padrão inicial: 1234).');
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
     try {
-      const res = await api.loginMember(selectedMember.id, pin || undefined);
+      const res = await api.loginMember(selectedMember.id, cleanPin);
       const session: UserSession = {
         userType: 'integrante',
         roleLevel: res.roleLevel,
@@ -65,7 +72,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         token: res.token
       };
 
-      if (!res.hasPinSet) {
+      if (res.needsPinSetup || cleanPin === '1234') {
         setLoggedInSession(session);
         setShowSetPinPrompt(true);
       } else {
@@ -80,7 +87,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   const handleSetNewPin = async (skip = false) => {
-    if (!loggedInSession) return;
+    if (!loggedInSession || !loggedInSession.member) return;
     if (skip) {
       onLoginSuccess(loggedInSession);
       onClose();
@@ -88,14 +95,33 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
 
     if (!newPin || newPin.length < 4) {
-      setError('O PIN deve conter ao menos 4 dígitos ou caracteres.');
+      setError('O PIN deve conter ao menos 4 dígitos numéricos.');
+      return;
+    }
+
+    if (newPin === '1234') {
+      setError('Escolha um PIN diferente do padrão 1234 para sua proteção.');
+      return;
+    }
+
+    if (newPin !== confirmNewPin) {
+      setError('A confirmação do PIN não coincide com o novo PIN.');
       return;
     }
 
     try {
       setLoading(true);
-      await api.setPin(newPin, loggedInSession.member?.id);
-      onLoginSuccess(loggedInSession);
+      await api.setPin(newPin, loggedInSession.member.id);
+      const updatedMember: Member = {
+        ...loggedInSession.member,
+        pin: newPin,
+        hasCustomPin: true,
+        hasPin: true
+      };
+      onLoginSuccess({
+        ...loggedInSession,
+        member: updatedMember
+      });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erro ao registrar PIN.');
@@ -131,16 +157,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-sky-400 shrink-0 bg-white">
-              <img
-                src="./logo-igreja.jpg"
-                alt="Logo Igreja Rasgando os Céus Bauru"
-                className="w-full h-full object-cover scale-150"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
-                }}
-              />
-            </div>
+            <img
+              src="./logo-igreja.png"
+              alt="Logo Igreja Rasgando os Céus Bauru"
+              className="w-11 h-11 object-contain shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = './logo-igreja.jpg';
+              }}
+            />
             <div>
               <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight">
                 Igreja Rasgando os Céus — Bauru
@@ -159,14 +183,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         {/* First time PIN prompt */}
-        {showSetPinPrompt ? (
+        {showSetPinPrompt && loggedInSession?.member ? (
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 text-sm">
               <Lock className="w-5 h-5 shrink-0 text-amber-600" />
               <div>
-                <p className="font-semibold">Proteja seu acesso individual</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Cadastre um PIN pessoal de 4 dígitos para que apenas você possa alterar sua disponibilidade e função.
+                <p className="font-bold">Primeiro Acesso: Crie seu PIN Pessoal</p>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Olá, <strong>{loggedInSession.member.name}</strong>! Você acessou com a senha padrão 1234. Defina agora seu PIN individual (4 a 6 dígitos) para proteger suas funções e disponibilidade.
                 </p>
               </div>
             </div>
@@ -180,14 +204,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Novo PIN (Ex: 1234):
+                Novo PIN Pessoal (4 a 6 dígitos):
               </label>
               <input
                 type="password"
+                inputMode="numeric"
                 maxLength={6}
                 value={newPin}
-                onChange={(e) => setNewPin(e.target.value)}
-                placeholder="4 a 6 dígitos"
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Ex: 5821"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center text-lg tracking-widest font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Confirme o Novo PIN:
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={confirmNewPin}
+                onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Repita o novo PIN"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center text-lg tracking-widest font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -206,7 +247,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 disabled={loading || newPin.length < 4}
                 className="flex-1 py-2.5 px-4 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition cursor-pointer"
               >
-                {loading ? 'Salvando...' : 'Salvar PIN'}
+                {loading ? 'Salvando...' : 'Salvar Meu PIN'}
               </button>
             </div>
           </div>
@@ -344,32 +385,54 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         </button>
                       </div>
 
-                      {selectedMember.hasPin ? (
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Digite seu PIN pessoal:
-                          </label>
+                      {/* PIN Input field directly below member name */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                          {selectedMember.hasCustomPin || selectedMember.hasPin
+                            ? 'Digite seu PIN pessoal individual:'
+                            : 'Código PIN de Acesso (padrão inicial: 1234):'}
+                        </label>
+                        <div className="relative">
                           <input
                             type="password"
+                            inputMode="numeric"
                             maxLength={6}
                             value={pin}
                             onChange={(e) => setPin(e.target.value)}
-                            placeholder="PIN de 4 a 6 dígitos"
-                            className="w-full px-4 py-2.5 text-center text-lg tracking-widest font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder={
+                              selectedMember.hasCustomPin || selectedMember.hasPin
+                                ? 'PIN pessoal (4 a 6 dígitos)'
+                                : 'Digite 1234'
+                            }
+                            className="w-full px-4 py-3 text-center text-xl tracking-widest font-mono rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
                             autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleMemberLogin();
+                              }
+                            }}
                           />
                         </div>
-                      ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Este é o seu primeiro acesso ou você ainda não definiu um PIN. Você poderá configurá-lo logo em seguida.
-                        </p>
-                      )}
+
+                        {selectedMember.hasCustomPin || selectedMember.hasPin ? (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Digite sua senha individual. Se você esqueceu, solicite ao líder/administrador para resetar para o padrão 1234.
+                          </p>
+                        ) : (
+                          <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                            <KeyRound className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                            <span>
+                              Primeiro acesso de <strong>{selectedMember.name}</strong>: digite a senha padrão <strong>1234</strong>. Em seguida você definirá seu PIN individual definitivo.
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         type="button"
                         onClick={handleMemberLogin}
-                        disabled={loading || (selectedMember.hasPin && !pin)}
-                        className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm transition shadow-sm cursor-pointer flex items-center justify-center gap-2"
+                        disabled={loading || !pin.trim()}
+                        className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm transition shadow-md cursor-pointer flex items-center justify-center gap-2"
                       >
                         {loading ? 'Entrando...' : 'Confirmar e Entrar'}
                       </button>

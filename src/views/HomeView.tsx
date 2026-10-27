@@ -75,30 +75,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-950 via-slate-900 to-indigo-950 text-white p-6 sm:p-10 shadow-xl border border-sky-800/40">
         <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:block">
-          <div className="w-36 h-36 rounded-full overflow-hidden border-4 border-amber-400/40 shadow-2xl bg-white p-1">
-            <img
-              src="./logo-igreja.jpg"
-              alt="Igreja Rasgando os Céus Bauru"
-              className="w-full h-full object-cover scale-150"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
-              }}
-            />
-          </div>
+          <img
+            src="./logo-igreja.png"
+            alt="Igreja Rasgando os Céus Bauru"
+            className="w-32 h-32 object-contain drop-shadow-2xl"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = './logo-igreja.jpg';
+            }}
+          />
         </div>
 
         <div className="relative z-10 max-w-2xl">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 shadow-lg bg-white shrink-0 md:hidden flex items-center justify-center">
-              <img
-                src="./logo-igreja.jpg"
-                alt="Logo Igreja Rasgando os Céus Bauru"
-                className="w-full h-full object-cover scale-150"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
-                }}
-              />
-            </div>
+            <img
+              src="./logo-igreja.png"
+              alt="Logo Igreja Rasgando os Céus Bauru"
+              className="w-12 h-12 object-contain shrink-0 md:hidden drop-shadow-md"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = './logo-igreja.jpg';
+              }}
+            />
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/20 backdrop-blur-md text-amber-300 text-xs font-bold border border-sky-400/30">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Igreja Rasgando os Céus — Bauru</span>

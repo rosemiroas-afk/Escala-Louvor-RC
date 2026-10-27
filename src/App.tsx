@@ -17,6 +17,8 @@ import { CultosView } from './views/CultosView.tsx';
 import { MembersView } from './views/MembersView.tsx';
 import { ReportsView } from './views/ReportsView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
+import { InitialAccessView } from './views/InitialAccessView.tsx';
+import { SetPersonalPinModal } from './components/SetPersonalPinModal.tsx';
 import { Music, WifiOff, Heart } from 'lucide-react';
 
 export default function App() {
@@ -24,8 +26,10 @@ export default function App() {
   const [session, setSession] = useState<UserSession | null>(getStoredSession());
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
+  const [pinSetupMember, setPinSetupMember] = useState<Member | null>(null);
+
   // App data
-  const [members, setMembers] = useState<Array<Member & { hasPin?: boolean }>>([]);
+  const [members, setMembers] = useState<Array<Member & { hasPin?: boolean; hasCustomPin?: boolean }>>([]);
   const [cultos, setCultos] = useState<Culto[]>([]);
   const [scales, setScales] = useState<MonthlyScale[]>([]);
   const [roleQuotas, setRoleQuotas] = useState<Record<MinisterialRole, number>>(DEFAULT_ROLE_QUOTAS);
@@ -85,10 +89,19 @@ export default function App() {
     }
   };
 
-  const handleLoginSuccess = (newSession: UserSession) => {
+  const handleLoginSuccess = (newSession: UserSession, needsPinSetup?: boolean) => {
     setSession(newSession);
     setStoredSession(newSession);
+    setIsLoginModalOpen(false);
     loadInitialData();
+    if (needsPinSetup && newSession.member) {
+      setPinSetupMember(newSession.member);
+    }
+  };
+
+  const handlePinSetupSuccess = (updatedMember: Member) => {
+    handleMemberUpdated(updatedMember);
+    setPinSetupMember(null);
   };
 
   const handleLogout = () => {
@@ -177,15 +190,24 @@ export default function App() {
         ) : (
           <>
             {currentTab === 'home' && (
-              <HomeView
-                session={session}
-                onNavigate={setCurrentTab}
-                onOpenLogin={() => setIsLoginModalOpen(true)}
-                onMemberUpdated={handleMemberUpdated}
-                cultos={cultos}
-                scales={scales}
-                membersCount={members.length}
-              />
+              session ? (
+                <HomeView
+                  session={session}
+                  onNavigate={setCurrentTab}
+                  onOpenLogin={() => setIsLoginModalOpen(true)}
+                  onMemberUpdated={handleMemberUpdated}
+                  cultos={cultos}
+                  scales={scales}
+                  membersCount={members.length}
+                />
+              ) : (
+                <InitialAccessView
+                  members={members}
+                  onLoginSuccess={handleLoginSuccess}
+                  onOpenAdminLogin={() => setIsLoginModalOpen(true)}
+                  onViewScale={() => setCurrentTab('scale')}
+                />
+              )
             )}
 
             {currentTab === 'availability' && (
@@ -241,16 +263,14 @@ export default function App() {
       <footer className="border-t border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 text-slate-500 text-xs py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full overflow-hidden border border-sky-400 shrink-0 bg-white">
-              <img
-                src="./logo-igreja.jpg"
-                alt="Logo Igreja Rasgando os Céus Bauru"
-                className="w-full h-full object-cover scale-150"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = './assets/aistudio/IMG-20261026-WA0006_be6ae893.jpg';
-                }}
-              />
-            </div>
+            <img
+              src="./logo-igreja.png"
+              alt="Logo Igreja Rasgando os Céus Bauru"
+              className="w-7 h-7 object-contain shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = './logo-igreja.jpg';
+              }}
+            />
             <span className="font-extrabold text-slate-800 dark:text-slate-200">
               Igreja Rasgando os Céus — Bauru
             </span>
@@ -274,6 +294,16 @@ export default function App() {
         members={members}
         onLoginSuccess={handleLoginSuccess}
       />
+
+      {/* First-time Personal PIN Setup Modal */}
+      {pinSetupMember && (
+        <SetPersonalPinModal
+          isOpen={Boolean(pinSetupMember)}
+          member={pinSetupMember}
+          onSuccess={handlePinSetupSuccess}
+          onSkip={() => setPinSetupMember(null)}
+        />
+      )}
     </div>
   );
 }

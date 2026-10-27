@@ -161,6 +161,8 @@ export const api = {
         roleLevel: UserRoleLevel;
         member: Member;
         hasPinSet: boolean;
+        hasCustomPin?: boolean;
+        needsPinSetup?: boolean;
       }>('/api/auth/login-member', {
         method: 'POST',
         body: JSON.stringify({ memberId, pin })
@@ -189,13 +191,26 @@ export const api = {
 
   async setPin(pin: string, memberId?: string) {
     try {
-      return await request<{ success: boolean; message: string }>('/api/auth/set-pin', {
+      return await request<{ success: boolean; message: string; member?: Member }>('/api/auth/set-pin', {
         method: 'POST',
         body: JSON.stringify({ pin, memberId })
       });
     } catch (e: any) {
       if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
         return localDb.setPin(pin, memberId);
+      }
+      throw e;
+    }
+  },
+
+  async resetMemberPin(memberId: string) {
+    try {
+      return await request<{ success: boolean; message: string; member?: Member }>(`/api/members/${memberId}/reset-pin`, {
+        method: 'POST'
+      });
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        return localDb.resetMemberPin(memberId);
       }
       throw e;
     }

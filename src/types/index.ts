@@ -48,6 +48,8 @@ export interface Member {
   active: boolean;
   contact?: string;
   pin?: string | null;
+  hasCustomPin?: boolean;
+  hasPin?: boolean;
   roleLevel: UserRoleLevel;
   createdAt: string;
   updatedAt: string;

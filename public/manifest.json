@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Painel de Escalar Ministério de Louvor - Igreja Rasgando os Céus Bauru",
+  "name": "Painel de Escala - Igreja Rasgando os Céus Bauru",
   "short_name": "LouvorIRC",
-  "description": "Painel de Escalar Ministério de Louvor da Igreja Rasgando os Céus Bauru. Gestão de integrantes e escala equilibrada.",
+  "description": "Painel de Escala da Igreja Rasgando os Céus Bauru. Gestão de integrantes e escala equilibrada.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

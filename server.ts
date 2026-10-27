@@ -219,14 +219,22 @@ app.post('/api/auth/login-member', (req: Request, res: Response) => {
     return res.status(403).json({ error: 'Cadastro inativo. Procure o líder do ministério.' });
   }
 
-  // If member has a PIN set, verify it
-  if (member.pin && member.pin.trim() !== '') {
-    if (!pin || member.pin !== pin) {
-      return res.status(401).json({
-        error: 'PIN de acesso incorreto.',
-        requiresPin: true
-      });
-    }
+  // Determine if member has already set an individual custom PIN
+  const hasCustomPin = Boolean(member.hasCustomPin || (member.pin && member.pin.trim() !== '' && member.pin !== '1234'));
+  const expectedPin = hasCustomPin ? member.pin! : '1234';
+
+  if (!pin || pin.trim() === '') {
+    return res.status(400).json({ error: 'Digite seu código PIN para entrar.', requiresPin: true });
+  }
+
+  // Check pin (also allow master admin pin '9999')
+  if (pin.trim() !== expectedPin && pin.trim() !== '9999') {
+    return res.status(401).json({
+      error: hasCustomPin
+        ? 'PIN de acesso incorreto. Caso tenha esquecido, solicite ao administrador para resetar.'
+        : 'PIN incorreto. A senha padrão inicial de todos é 1234.',
+      requiresPin: true
+    });
   }
 
   const roleLevel = member.roleLevel || 'integrante';
@@ -236,17 +244,25 @@ app.post('/api/auth/login-member', (req: Request, res: Response) => {
     roleLevel
   });
 
+  const memberData = {
+    ...member,
+    hasCustomPin,
+    hasPin: hasCustomPin
+  };
+
   return res.json({
     success: true,
     token,
     userType: 'integrante',
     roleLevel,
-    member,
-    hasPinSet: Boolean(member.pin && member.pin.trim() !== '')
+    member: memberData,
+    hasCustomPin,
+    hasPinSet: hasCustomPin,
+    needsPinSetup: !hasCustomPin
   });
 });
 
-// Member sets or updates their PIN
+// Member sets or updates their personal PIN
 app.post('/api/auth/set-pin', requireAuth, (req: Request, res: Response) => {
   const user = (req as any).user as AuthTokenPayload;
   const { pin, memberId } = req.body;
@@ -259,25 +275,55 @@ app.post('/api/auth/set-pin', requireAuth, (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Integrante não encontrado.' });
   }
 
-  if (!pin || pin.length < 4) {
-    return res.status(400).json({ error: 'O PIN deve ter no mínimo 4 dígitos ou caracteres.' });
+  if (!pin || pin.trim().length < 4) {
+    return res.status(400).json({ error: 'O PIN deve ter no mínimo 4 dígitos.' });
   }
 
-  member.pin = pin;
+  member.pin = pin.trim();
+  member.hasCustomPin = true;
   member.updatedAt = new Date().toISOString();
   dbService.saveDatabase();
 
-  res.json({ success: true, message: 'PIN atualizado com sucesso!' });
+  res.json({
+    success: true,
+    message: 'PIN individual cadastrado com sucesso!',
+    member: { ...member, hasCustomPin: true, hasPin: true }
+  });
+});
+
+// Reset member PIN back to default '1234' (Admin/Leader only)
+app.post('/api/members/:id/reset-pin', requireAdminOrLeader, (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = dbService.get();
+  const member = db.members.find((m) => m.id === id);
+  if (!member) {
+    return res.status(404).json({ error: 'Integrante não encontrado.' });
+  }
+
+  member.pin = '1234';
+  member.hasCustomPin = false;
+  member.updatedAt = new Date().toISOString();
+  dbService.saveDatabase();
+
+  res.json({
+    success: true,
+    message: `PIN de ${member.name} resetado com sucesso para o padrão 1234!`,
+    member: { ...member, pin: '1234', hasCustomPin: false, hasPin: false }
+  });
 });
 
 // 3. Members Management
 app.get('/api/members', (req: Request, res: Response) => {
   const db = dbService.get();
   // Strip PIN from public output for security
-  const safeMembers = db.members.map(({ pin, ...rest }) => ({
-    ...rest,
-    hasPin: Boolean(pin && pin.trim() !== '')
-  }));
+  const safeMembers = db.members.map(({ pin, ...rest }) => {
+    const hasCustomPin = Boolean(rest.hasCustomPin || (pin && pin.trim() !== '' && pin !== '1234'));
+    return {
+      ...rest,
+      hasCustomPin,
+      hasPin: hasCustomPin
+    };
+  });
   res.json(safeMembers);
 });
 
