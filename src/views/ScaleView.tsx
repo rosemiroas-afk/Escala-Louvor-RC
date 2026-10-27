@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   Clock,
@@ -17,7 +17,11 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronDown,
-  Info
+  Info,
+  FileSpreadsheet,
+  Bell,
+  Loader2,
+  HandHeart
 } from 'lucide-react';
 import {
   MonthlyScale,
@@ -25,10 +29,13 @@ import {
   Member,
   ScaleParticipation,
   MinisterialRole,
-  ALL_ROLES
+  ALL_ROLES,
+  SubstitutionRequest
 } from '../types/index.ts';
 import { UserSession, api } from '../api.ts';
 import { RoleBadge } from '../components/RoleBadge.tsx';
+import { BatchImportCultosModal } from '../components/BatchImportCultosModal.tsx';
+import { RequestSubstitutionModal } from '../components/RequestSubstitutionModal.tsx';
 
 interface ScaleViewProps {
   session: UserSession | null;
@@ -36,6 +43,7 @@ interface ScaleViewProps {
   cultos: Culto[];
   members: Member[];
   onScaleUpdated: () => void;
+  onCultosUpdated?: () => void;
   onOpenLogin: () => void;
 }
 
@@ -45,6 +53,7 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
   cultos,
   members,
   onScaleUpdated,
+  onCultosUpdated,
   onOpenLogin
 }) => {
   const now = new Date();
@@ -57,6 +66,22 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
     null
   );
 
+  // Substitutions state
+  const [substitutions, setSubstitutions] = useState<SubstitutionRequest[]>([]);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [activeSubModal, setActiveSubModal] = useState<{
+    participationId: string;
+    cultoId: string;
+    cultoName: string;
+    cultoDate: string;
+    cultoTime: string;
+    role: MinisterialRole;
+    currentMemberName: string;
+  } | null>(null);
+
+  // Batch import modal
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+
   // Manual Edit Modal state
   const [editingCultoId, setEditingCultoId] = useState<string | null>(null);
   const [candidateOptions, setCandidateOptions] = useState<Member[]>([]);
@@ -68,6 +93,19 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
   } | null>(null);
 
   const isAdminOrLeader = session?.roleLevel === 'admin' || session?.roleLevel === 'lider';
+
+  const loadSubstitutions = async () => {
+    try {
+      const data = await api.getSubstitutions(selectedMonth);
+      setSubstitutions(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar pedidos de substituição:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadSubstitutions();
+  }, [selectedMonth]);
 
   // Find scale for selected month
   const currentScale = scales.find((s) => s.month === selectedMonth);
@@ -139,6 +177,43 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
       onScaleUpdated();
     } catch (err: any) {
       setMessage({ text: err.message, type: 'error' });
+    }
+  };
+
+  const handleAcceptSubstitution = async (subId: string) => {
+    if (!session) {
+      onOpenLogin();
+      return;
+    }
+    setActionLoadingId(subId);
+    try {
+      await api.acceptSubstitution(subId);
+      setMessage({
+        text: 'Você assumiu a escala com sucesso! A vaga foi atualizada na escala oficial e a equipe foi notificada.',
+        type: 'success'
+      });
+      await Promise.all([loadSubstitutions(), onScaleUpdated()]);
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Erro ao assumir substituição.', type: 'error' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleCancelSubstitution = async (subId: string) => {
+    if (!window.confirm('Deseja realmente cancelar este pedido de substituição?')) return;
+    setActionLoadingId(subId);
+    try {
+      await api.cancelSubstitution(subId);
+      setMessage({
+        text: 'Pedido de substituição cancelado com sucesso.',
+        type: 'info'
+      });
+      await loadSubstitutions();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Erro ao cancelar pedido.', type: 'error' });
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -384,17 +459,47 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
           )}
 
           {isAdminOrLeader && (
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
-              <span>{currentScale ? 'Regerar Escala' : 'Gerar Escala Automática'}</span>
-            </button>
+            <>
+              <button
+                onClick={() => setIsBatchModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Cadastrar todos os cultos do mês a partir de planilha ou CSV"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Importar Cultos (Planilha/CSV)</span>
+              </button>
+
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+                <span>{currentScale ? 'Regerar Escala' : 'Gerar Escala Automática'}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Pending Substitutions Notification Banner */}
+      {substitutions.filter((s) => s.status === 'pendente').length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-700/60 text-xs text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm text-amber-950 dark:text-amber-100">
+                {substitutions.filter((s) => s.status === 'pendente').length} Pedido(s) de Substituição Pendente(s) em {selectedMonth}
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                Integrantes da mesma função ministerial ou liderança foram notificados e podem assumir as escalas marcadas abaixo.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Admin Publish Bar */}
       {isAdminOrLeader && currentScale && (
@@ -564,55 +669,168 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {parts.map((p) => {
                       const isUnfilled = p.memberId === null;
+                      const activeSub = substitutions.find(
+                        (s) => s.participationId === p.id && s.status === 'pendente'
+                      );
+                      const isMySlot = session?.member?.id === p.memberId;
+                      const isRequester = session?.member?.id === activeSub?.requestedByMemberId;
+                      const userHasMatchingRole =
+                        session?.member &&
+                        (session.member.primaryRole === p.role ||
+                          (session.member.secondaryRoles &&
+                            session.member.secondaryRoles.includes(p.role)));
+                      const canAcceptSub =
+                        activeSub && (isAdminOrLeader || userHasMatchingRole) && !isRequester;
+                      const canCancelSub = activeSub && (isRequester || isAdminOrLeader);
 
                       return (
                         <div
                           key={p.id}
-                          className={`p-3.5 rounded-xl border transition flex items-center justify-between gap-3 ${
-                            isUnfilled
+                          className={`p-3.5 rounded-2xl border transition flex flex-col justify-between gap-2.5 ${
+                            activeSub
+                              ? 'border-amber-400 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-950/30 ring-1 ring-amber-400/50'
+                              : isUnfilled
                               ? 'border-dashed border-amber-300 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20'
                               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-300'
                           }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <RoleBadge role={p.role} size="sm" />
-                            <div className="min-w-0">
-                              {isUnfilled ? (
-                                <span className="text-xs font-bold text-amber-700 dark:text-amber-400 italic">
-                                  Não preenchida
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <RoleBadge role={p.role} size="sm" />
+                              <div className="min-w-0">
+                                {isUnfilled ? (
+                                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400 italic">
+                                    Não preenchida
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate block">
+                                    {p.memberName}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-400 block">
+                                  {isUnfilled ? 'Vaga sem integrante disponível' : 'Confirmado'}
                                 </span>
-                              ) : (
-                                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate block">
-                                  {p.memberName}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-400 block">
-                                {isUnfilled ? 'Vaga sem integrante disponível' : 'Confirmado'}
-                              </span>
+                              </div>
                             </div>
+
+                            {/* Admin Edit Trigger */}
+                            {isAdminOrLeader && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOpenSlotEdit(culto.id, p.role, p.id, p.memberId)
+                                  }
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                  title={isUnfilled ? 'Preencher vaga' : 'Substituir integrante'}
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSlot(p.id)}
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                  title="Remover vaga da escala"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Admin Edit Trigger */}
-                          {isAdminOrLeader && (
-                            <div className="flex items-center gap-1 shrink-0">
+                          {/* Active Substitution Alert & Action Box */}
+                          {activeSub && (
+                            <div className="p-2.5 rounded-xl bg-amber-100/80 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700/60 text-xs text-amber-950 dark:text-amber-100 space-y-1.5 animate-in fade-in">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-extrabold flex items-center gap-1 text-[11px] text-amber-900 dark:text-amber-200">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>Substituição Solicitada</span>
+                                </span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200/90 dark:bg-amber-800 text-amber-900 dark:text-amber-200 font-bold uppercase">
+                                  Aguardando
+                                </span>
+                              </div>
+
+                              <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90 leading-tight">
+                                Por: <strong>{activeSub.requestedByMemberName}</strong>
+                                {activeSub.reason && (
+                                  <span className="block italic text-[10px] text-amber-800 dark:text-amber-300 mt-0.5">
+                                    "{activeSub.reason}"
+                                  </span>
+                                )}
+                              </p>
+
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                {canAcceptSub ? (
+                                  <button
+                                    type="button"
+                                    disabled={actionLoadingId === activeSub.id}
+                                    onClick={() => handleAcceptSubstitution(activeSub.id)}
+                                    className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-2xs transition flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    {actionLoadingId === activeSub.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <HandHeart className="w-3 h-3" />
+                                    )}
+                                    <span>Assumir Escala</span>
+                                  </button>
+                                ) : !session ? (
+                                  <button
+                                    type="button"
+                                    onClick={onOpenLogin}
+                                    className="flex-1 py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] transition text-center cursor-pointer"
+                                  >
+                                    Entrar para Assumir
+                                  </button>
+                                ) : null}
+
+                                {canCancelSub && (
+                                  <button
+                                    type="button"
+                                    disabled={actionLoadingId === activeSub.id}
+                                    onClick={() => handleCancelSubstitution(activeSub.id)}
+                                    className="py-1 px-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-[10px] transition cursor-pointer"
+                                  >
+                                    Cancelar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Button to request substitution if slot is filled and no active substitution */}
+                          {!isUnfilled && !activeSub && (
+                            <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleOpenSlotEdit(culto.id, p.role, p.id, p.memberId)
-                                }
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title={isUnfilled ? 'Preencher vaga' : 'Substituir integrante'}
+                                onClick={() => {
+                                  if (!session) {
+                                    onOpenLogin();
+                                    return;
+                                  }
+                                  setActiveSubModal({
+                                    participationId: p.id,
+                                    cultoId: culto.id,
+                                    cultoName: culto.name,
+                                    cultoDate: culto.date,
+                                    cultoTime: culto.time,
+                                    role: p.role,
+                                    currentMemberName: p.memberName || ''
+                                  });
+                                }}
+                                className="text-[11px] font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 flex items-center gap-1 transition cursor-pointer hover:underline"
+                                title="Solicitar que outro integrante da mesma função assuma esta escala"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Solicitar Substituto</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSlot(p.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title="Remover vaga da escala"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+
+                              {isMySlot && (
+                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                                  Sua vaga
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -692,6 +910,39 @@ export const ScaleView: React.FC<ScaleViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Batch Import Cultos Modal */}
+      <BatchImportCultosModal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        onSuccess={() => {
+          if (onCultosUpdated) onCultosUpdated();
+          onScaleUpdated();
+        }}
+        defaultMonth={selectedMonth}
+      />
+
+      {/* Request Substitution Modal */}
+      {activeSubModal && (
+        <RequestSubstitutionModal
+          isOpen={!!activeSubModal}
+          onClose={() => setActiveSubModal(null)}
+          onSuccess={() => {
+            setMessage({
+              text: 'Pedido de substituição enviado com sucesso! Os integrantes da mesma função e a liderança foram notificados.',
+              type: 'success'
+            });
+            loadSubstitutions();
+          }}
+          participationId={activeSubModal.participationId}
+          cultoId={activeSubModal.cultoId}
+          cultoName={activeSubModal.cultoName}
+          cultoDate={activeSubModal.cultoDate}
+          cultoTime={activeSubModal.cultoTime}
+          role={activeSubModal.role}
+          currentMemberName={activeSubModal.currentMemberName}
+        />
       )}
     </div>
   );

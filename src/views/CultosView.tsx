@@ -9,10 +9,12 @@ import {
   AlertCircle,
   X,
   Save,
-  ChevronRight
+  ChevronRight,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Culto, CultoStatus } from '../types/index.ts';
 import { api } from '../api.ts';
+import { BatchImportCultosModal } from '../components/BatchImportCultosModal.tsx';
 
 interface CultosViewProps {
   cultos: Culto[];
@@ -25,6 +27,7 @@ export const CultosView: React.FC<CultosViewProps> = ({ cultos, onCultosUpdated 
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [editingCulto, setEditingCulto] = useState<Culto | null>(null);
 
   // Form fields
@@ -137,7 +140,7 @@ export const CultosView: React.FC<CultosViewProps> = ({ cultos, onCultosUpdated 
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Month filter */}
           <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl">
             <Calendar className="w-4 h-4 text-slate-400 ml-2" />
@@ -148,6 +151,15 @@ export const CultosView: React.FC<CultosViewProps> = ({ cultos, onCultosUpdated 
               className="bg-transparent text-sm font-semibold text-slate-800 dark:text-slate-200 outline-none cursor-pointer pr-2"
             />
           </div>
+
+          <button
+            onClick={() => setIsBatchModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+            title="Importar todos os cultos do mês a partir de CSV ou Planilha"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Importar em Lote (CSV/Planilha)</span>
+          </button>
 
           <button
             onClick={handleOpenCreate}
@@ -358,6 +370,16 @@ export const CultosView: React.FC<CultosViewProps> = ({ cultos, onCultosUpdated 
           </div>
         </div>
       )}
+
+      {/* Batch Import Cultos Modal */}
+      <BatchImportCultosModal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        onSuccess={() => {
+          onCultosUpdated();
+        }}
+        defaultMonth={selectedMonth}
+      />
     </div>
   );
 };

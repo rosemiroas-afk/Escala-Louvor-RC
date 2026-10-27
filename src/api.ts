@@ -5,7 +5,8 @@ import {
   MonthlyScale,
   ScaleParticipation,
   MinisterialRole,
-  UserRoleLevel
+  UserRoleLevel,
+  SubstitutionRequest
 } from './types/index.ts';
 import { localDb } from './localDb.ts';
 
@@ -347,6 +348,23 @@ export const api = {
     }
   },
 
+  async batchImportCultos(
+    cultos: Array<Omit<Culto, 'id' | 'createdAt'>>,
+    replaceExistingForMonth?: string
+  ) {
+    try {
+      return await request<{ success: boolean; count: number; cultos: Culto[] }>('/api/cultos/batch-import', {
+        method: 'POST',
+        body: JSON.stringify({ cultos, replaceExistingForMonth })
+      });
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        return localDb.batchImportCultos(cultos, replaceExistingForMonth);
+      }
+      throw e;
+    }
+  },
+
   // Availabilities
   async getAvailabilities(month?: string, memberId?: string) {
     try {
@@ -580,6 +598,70 @@ export const api = {
           localDb.reset();
           return { success: true, message: 'Sistema restaurado para o estado inicial padrão!' };
         }
+      }
+      throw e;
+    }
+  },
+
+  // Substituições
+  async getSubstitutions(month?: string) {
+    try {
+      const q = month ? `?month=${month}` : '';
+      return await request<SubstitutionRequest[]>(`/api/substitutions${q}`);
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        return localDb.getSubstitutions(month);
+      }
+      throw e;
+    }
+  },
+
+  async requestSubstitution(participationId: string, cultoId: string, reason?: string) {
+    try {
+      return await request<{ success: boolean; substitution: SubstitutionRequest }>('/api/substitutions', {
+        method: 'POST',
+        body: JSON.stringify({ participationId, cultoId, reason })
+      });
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        const session = getStoredSession();
+        if (!session?.member) throw new Error('Faça login para solicitar substituição.');
+        return localDb.createSubstitutionRequest({
+          participationId,
+          cultoId,
+          requestedByMemberId: session.member.id,
+          reason
+        });
+      }
+      throw e;
+    }
+  },
+
+  async acceptSubstitution(substitutionId: string) {
+    try {
+      return await request<{ success: boolean; substitution: SubstitutionRequest }>(
+        `/api/substitutions/${substitutionId}/accept`,
+        { method: 'POST' }
+      );
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        const session = getStoredSession();
+        if (!session?.member) throw new Error('Faça login para assumir esta vaga.');
+        return localDb.acceptSubstitution(substitutionId, session.member.id);
+      }
+      throw e;
+    }
+  },
+
+  async cancelSubstitution(substitutionId: string) {
+    try {
+      return await request<{ success: boolean; message: string }>(
+        `/api/substitutions/${substitutionId}/cancel`,
+        { method: 'POST' }
+      );
+    } catch (e: any) {
+      if (e.message === 'STATIC_MODE' || isOfflineOrStatic) {
+        return localDb.cancelSubstitution(substitutionId);
       }
       throw e;
     }

@@ -226,6 +226,7 @@ export default function App() {
                 cultos={cultos}
                 members={members}
                 onScaleUpdated={handleScalesUpdated}
+                onCultosUpdated={handleCultosUpdated}
                 onOpenLogin={() => setIsLoginModalOpen(true)}
               />
             )}

@@ -10,7 +10,8 @@ import {
   MonthlyScale,
   ScaleParticipation,
   MinisterialRole,
-  ALL_ROLES
+  ALL_ROLES,
+  SubstitutionRequest
 } from './src/types/index.ts';
 
 const app = express();
@@ -516,6 +517,41 @@ app.delete('/api/cultos/:id', requireAdminOrLeader, (req: Request, res: Response
   res.json({ success: true, message: 'Culto excluído com sucesso.' });
 });
 
+// Batch import cultos from CSV / Spreadsheet
+app.post('/api/cultos/batch-import', requireAdminOrLeader, (req: Request, res: Response) => {
+  const { cultos, replaceExistingForMonth } = req.body;
+  if (!Array.isArray(cultos) || cultos.length === 0) {
+    return res.status(400).json({ error: 'Nenhum culto válido fornecido para importação.' });
+  }
+
+  const db = dbService.get();
+
+  if (replaceExistingForMonth && typeof replaceExistingForMonth === 'string') {
+    db.cultos = db.cultos.filter((c) => !c.date.startsWith(replaceExistingForMonth));
+  }
+
+  const now = new Date().toISOString();
+  const createdCultos: Culto[] = [];
+
+  for (const item of cultos) {
+    if (!item.name || !item.date || !item.time) continue;
+    const newCulto: Culto = {
+      id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: item.name.trim(),
+      date: item.date.trim(),
+      time: item.time.trim(),
+      notes: item.notes || '',
+      status: item.status || 'aberto',
+      createdAt: now
+    };
+    db.cultos.push(newCulto);
+    createdCultos.push(newCulto);
+  }
+
+  dbService.saveDatabase();
+  res.status(201).json({ success: true, count: createdCultos.length, cultos: createdCultos });
+});
+
 // 5. Disponibilidade Mensal
 app.get('/api/availabilities', (req: Request, res: Response) => {
   const db = dbService.get();
@@ -789,6 +825,129 @@ app.put('/api/config/quotas', requireAdminOrLeader, (req: Request, res: Response
 
   dbService.saveDatabase();
   res.json({ success: true, quotas: db.roleQuotas, message: 'Configurações atualizadas!' });
+});
+
+// 8b. Solicitações de Substituição
+app.get('/api/substitutions', (req: Request, res: Response) => {
+  const db = dbService.get();
+  if (!db.substitutionRequests) db.substitutionRequests = [];
+  const { month } = req.query;
+
+  let list = db.substitutionRequests;
+  if (month && typeof month === 'string') {
+    list = list.filter((s) => s.cultoDate.startsWith(month));
+  }
+
+  res.json([...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+});
+
+app.post('/api/substitutions', requireAuth, (req: Request, res: Response) => {
+  const { participationId, cultoId, reason } = req.body;
+  const user = (req as any).user;
+  const db = dbService.get();
+  if (!db.substitutionRequests) db.substitutionRequests = [];
+
+  const member = db.members.find((m) => m.id === user.memberId);
+  if (!member) {
+    return res.status(404).json({ error: 'Integrante não identificado.' });
+  }
+
+  const culto = db.cultos.find((c) => c.id === cultoId);
+  if (!culto) {
+    return res.status(404).json({ error: 'Culto não encontrado.' });
+  }
+
+  // Find participation role from scales
+  let role: MinisterialRole = (member.roles && member.roles[0]) || member.primaryRole || 'Ministro';
+  let targetScale: MonthlyScale | undefined;
+  for (const s of db.scales) {
+    const p = s.participations.find(
+      (x) => x.id === participationId || (x.cultoId === cultoId && x.memberId === member.id)
+    );
+    if (p) {
+      role = p.role;
+      targetScale = s;
+      break;
+    }
+  }
+
+  const newReq: SubstitutionRequest = {
+    id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    scaleId: targetScale?.id,
+    participationId,
+    cultoId,
+    cultoName: culto.name,
+    cultoDate: culto.date,
+    cultoTime: culto.time,
+    role,
+    requestedByMemberId: member.id,
+    requestedByMemberName: member.name,
+    reason: reason || '',
+    status: 'pendente',
+    createdAt: new Date().toISOString()
+  };
+
+  db.substitutionRequests.push(newReq);
+  dbService.saveDatabase();
+
+  res.status(201).json({ success: true, substitution: newReq });
+});
+
+app.post('/api/substitutions/:id/accept', requireAuth, (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const db = dbService.get();
+  if (!db.substitutionRequests) db.substitutionRequests = [];
+
+  const sub = db.substitutionRequests.find((s) => s.id === id);
+  if (!sub) {
+    return res.status(404).json({ error: 'Solicitação de substituição não encontrada.' });
+  }
+  if (sub.status !== 'pendente') {
+    return res.status(400).json({ error: 'Esta solicitação já foi finalizada ou cancelada.' });
+  }
+
+  const substitute = db.members.find((m) => m.id === user.memberId);
+  if (!substitute) {
+    return res.status(404).json({ error: 'Integrante substituto não encontrado.' });
+  }
+
+  sub.status = 'atendida';
+  sub.substitutedByMemberId = substitute.id;
+  sub.substitutedByMemberName = substitute.name;
+  sub.resolvedAt = new Date().toISOString();
+
+  // Update matching scale participations
+  for (const s of db.scales) {
+    const p = s.participations.find(
+      (x) => x.id === sub.participationId || (x.cultoId === sub.cultoId && x.memberId === sub.requestedByMemberId)
+    );
+    if (p) {
+      p.memberId = substitute.id;
+      p.memberName = substitute.name;
+      break;
+    }
+  }
+
+  dbService.saveDatabase();
+  res.json({ success: true, substitution: sub });
+});
+
+app.post('/api/substitutions/:id/cancel', requireAuth, (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = dbService.get();
+  if (!db.substitutionRequests) db.substitutionRequests = [];
+
+  const sub = db.substitutionRequests.find((s) => s.id === id);
+  if (!sub) {
+    return res.status(404).json({ error: 'Solicitação não encontrada.' });
+  }
+
+  sub.status = 'cancelada';
+  sub.resolvedAt = new Date().toISOString();
+  dbService.saveDatabase();
+
+  res.json({ success: true, message: 'Solicitação cancelada com sucesso.' });
 });
 
 // 9. Quick Demo Seed / Testing helper

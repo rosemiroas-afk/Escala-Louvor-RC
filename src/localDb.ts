@@ -7,7 +7,8 @@ import {
   ScaleParticipation,
   MinisterialRole,
   DEFAULT_ROLE_QUOTAS,
-  UserRoleLevel
+  UserRoleLevel,
+  SubstitutionRequest
 } from './types/index.ts';
 import { generateMonthlyScale } from './server/scheduler.ts';
 
@@ -173,7 +174,8 @@ function createInitialDatabase(): DatabaseSchema {
     availabilities: [],
     scales: [],
     roleQuotas: { ...DEFAULT_ROLE_QUOTAS },
-    adminPin: '1234'
+    adminPin: '1234',
+    substitutionRequests: []
   };
 }
 
@@ -190,6 +192,7 @@ class LocalDatabaseManager {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.members && parsed.cultos && parsed.availabilities) {
+          if (!parsed.substitutionRequests) parsed.substitutionRequests = [];
           return parsed;
         }
       }
@@ -446,6 +449,33 @@ class LocalDatabaseManager {
     return { success: true, message: 'Culto excluído com sucesso.' };
   }
 
+  public batchImportCultos(
+    cultos: Array<Omit<Culto, 'id' | 'createdAt'>>,
+    replaceExistingForMonth?: string
+  ) {
+    if (replaceExistingForMonth) {
+      this.db.cultos = this.db.cultos.filter((c) => !c.date.startsWith(replaceExistingForMonth));
+    }
+    const now = new Date().toISOString();
+    const created: Culto[] = [];
+    for (const c of cultos) {
+      if (!c.name || !c.date || !c.time) continue;
+      const newCulto: Culto = {
+        id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: c.name.trim(),
+        date: c.date.trim(),
+        time: c.time.trim(),
+        notes: c.notes || '',
+        status: c.status || 'aberto',
+        createdAt: now
+      };
+      this.db.cultos.push(newCulto);
+      created.push(newCulto);
+    }
+    this.save();
+    return { success: true, count: created.length, cultos: created };
+  }
+
   public saveAvailabilities(
     memberId: string,
     items: Array<{ cultoId: string; status: 'disponivel' | 'indisponivel' }>
@@ -581,6 +611,104 @@ class LocalDatabaseManager {
       unallocatedMembers: scale ? scale.unallocatedMembers : [],
       memberStats
     };
+  }
+
+  public getSubstitutions(month?: string) {
+    if (!this.db.substitutionRequests) this.db.substitutionRequests = [];
+    let list = this.db.substitutionRequests;
+    if (month) {
+      list = list.filter((s) => s.cultoDate.startsWith(month));
+    }
+    return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  public createSubstitutionRequest(data: {
+    participationId: string;
+    cultoId: string;
+    requestedByMemberId: string;
+    reason?: string;
+  }) {
+    if (!this.db.substitutionRequests) this.db.substitutionRequests = [];
+
+    const member = this.db.members.find((m) => m.id === data.requestedByMemberId);
+    if (!member) throw new Error('Integrante não encontrado.');
+
+    const culto = this.db.cultos.find((c) => c.id === data.cultoId);
+    if (!culto) throw new Error('Culto não encontrado.');
+
+    // Find participation role from scales
+    let role: MinisterialRole = (member.roles && member.roles[0]) || member.primaryRole || 'Ministro';
+    let targetScale: MonthlyScale | undefined;
+    for (const s of this.db.scales) {
+      const p = s.participations.find(
+        (x) => x.id === data.participationId || (x.cultoId === data.cultoId && x.memberId === member.id)
+      );
+      if (p) {
+        role = p.role;
+        targetScale = s;
+        break;
+      }
+    }
+
+    const newReq: SubstitutionRequest = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      scaleId: targetScale?.id,
+      participationId: data.participationId,
+      cultoId: data.cultoId,
+      cultoName: culto.name,
+      cultoDate: culto.date,
+      cultoTime: culto.time,
+      role,
+      requestedByMemberId: member.id,
+      requestedByMemberName: member.name,
+      reason: data.reason || '',
+      status: 'pendente',
+      createdAt: new Date().toISOString()
+    };
+
+    this.db.substitutionRequests.push(newReq);
+    this.save();
+    return { success: true, substitution: newReq };
+  }
+
+  public acceptSubstitution(substitutionId: string, substituteMemberId: string) {
+    if (!this.db.substitutionRequests) this.db.substitutionRequests = [];
+    const sub = this.db.substitutionRequests.find((s) => s.id === substitutionId);
+    if (!sub) throw new Error('Solicitação de substituição não encontrada.');
+    if (sub.status !== 'pendente') throw new Error('Esta solicitação já foi finalizada ou cancelada.');
+
+    const substitute = this.db.members.find((m) => m.id === substituteMemberId);
+    if (!substitute) throw new Error('Integrante substituto não encontrado.');
+
+    sub.status = 'atendida';
+    sub.substitutedByMemberId = substitute.id;
+    sub.substitutedByMemberName = substitute.name;
+    sub.resolvedAt = new Date().toISOString();
+
+    // Update the scale participation in all matching scales
+    for (const s of this.db.scales) {
+      const p = s.participations.find(
+        (x) => x.id === sub.participationId || (x.cultoId === sub.cultoId && x.memberId === sub.requestedByMemberId)
+      );
+      if (p) {
+        p.memberId = substitute.id;
+        p.memberName = substitute.name;
+        break;
+      }
+    }
+
+    this.save();
+    return { success: true, substitution: sub };
+  }
+
+  public cancelSubstitution(substitutionId: string) {
+    if (!this.db.substitutionRequests) this.db.substitutionRequests = [];
+    const sub = this.db.substitutionRequests.find((s) => s.id === substitutionId);
+    if (!sub) throw new Error('Solicitação não encontrada.');
+    sub.status = 'cancelada';
+    sub.resolvedAt = new Date().toISOString();
+    this.save();
+    return { success: true, message: 'Solicitação de substituição cancelada.' };
   }
 }
 

@@ -115,6 +115,25 @@ export interface MonthlyScale {
   }>;
 }
 
+export interface SubstitutionRequest {
+  id: string;
+  scaleId?: string;
+  participationId: string;
+  cultoId: string;
+  cultoName: string;
+  cultoDate: string; // YYYY-MM-DD
+  cultoTime: string; // HH:MM
+  role: MinisterialRole;
+  requestedByMemberId: string;
+  requestedByMemberName: string;
+  reason?: string;
+  status: 'pendente' | 'atendida' | 'cancelada';
+  substitutedByMemberId?: string | null;
+  substitutedByMemberName?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 export interface DatabaseSchema {
   members: Member[];
   cultos: Culto[];
@@ -122,6 +141,7 @@ export interface DatabaseSchema {
   scales: MonthlyScale[];
   roleQuotas: Record<MinisterialRole, number>;
   adminPin: string;
+  substitutionRequests?: SubstitutionRequest[];
 }
 
 export interface AuthSession {
