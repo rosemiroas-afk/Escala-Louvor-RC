@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   User,
@@ -9,7 +9,9 @@ import {
   Search,
   Lock,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  ArrowLeft,
+  Users
 } from 'lucide-react';
 import { Member, MinisterialRole, ALL_ROLES, getMemberRoles } from '../types/index.ts';
 import { api, UserSession } from '../api.ts';
@@ -39,6 +41,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [confirmNewPin, setConfirmNewPin] = useState('');
   const [showSetPinPrompt, setShowSetPinPrompt] = useState(false);
   const [loggedInSession, setLoggedInSession] = useState<UserSession | null>(null);
+
+  // Semper que abrir o modal, limpa a seleção anterior para permitir escolher qualquer um dos 51 integrantes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedMember(null);
+      setPin('');
+      setAdminPin('');
+      setError(null);
+      setSearchTerm('');
+      setShowSetPinPrompt(false);
+      setNewPin('');
+      setConfirmNewPin('');
+      setLoggedInSession(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -356,6 +373,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      {/* Botão de Voltar para a lista dos 51 integrantes */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMember(null);
+                          setPin('');
+                          setError(null);
+                        }}
+                        className="w-full py-2 px-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 rounded-xl border border-indigo-200 dark:border-indigo-800 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>← Escolher Outro Integrante (Ver 51 Nomes)</span>
+                      </button>
+
                       <div className="p-3.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
                           <span className="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
@@ -378,10 +409,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setSelectedMember(null)}
-                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                          onClick={() => {
+                            setSelectedMember(null);
+                            setPin('');
+                            setError(null);
+                          }}
+                          className="px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg border border-indigo-200 dark:border-indigo-800 transition cursor-pointer shadow-2xs"
                         >
-                          Trocar
+                          Trocar Nome
                         </button>
                       </div>
 

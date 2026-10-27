@@ -12,12 +12,34 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="LouvorRasgandoCéus" />
+    <link rel="manifest" href="./manifest.json" />
     <link rel="icon" type="image/jpeg" href="./logo-igreja.jpg" />
-    </head>
+  </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-sky-500 selection:text-white min-h-screen">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="./src/main.tsx" onerror="loadGitHubPagesBundle()"></script>
+    <script>
+      function loadGitHubPagesBundle() {
+        if (!window.__BUNDLE_LOADED__) {
+          window.__BUNDLE_LOADED__ = true;
+          console.warn('[Hospedagem Estática] Carregando bundle compilado...');
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './assets/app.css';
+          document.head.appendChild(link);
+
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.crossOrigin = 'anonymous';
+          s.src = './assets/app.js';
+          document.body.appendChild(s);
+        }
+      }
+      // Se estiver no GitHub Pages (.github.io), carrega o bundle de produção compilado diretamente
+      if (window.location.hostname.endsWith('github.io')) {
+        loadGitHubPagesBundle();
+      }
+    </script>
   </body>
 </html>
 

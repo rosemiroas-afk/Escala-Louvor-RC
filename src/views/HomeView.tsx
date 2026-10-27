@@ -137,7 +137,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={onOpenLogin}
+                  className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/20 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  title="Trocar para outro integrante dos 51 cadastrados"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Trocar Integrante</span>
+                </button>
                 {session.member && (
                   <button
                     onClick={() => onNavigate('availability')}

@@ -225,7 +225,14 @@ export const InitialAccessView: React.FC<InitialAccessViewProps> = ({
               {/* Member Name and Badges */}
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
+                  <div
+                    onClick={() => {
+                      const input = document.getElementById('pin-input-' + m.id) as HTMLInputElement | null;
+                      input?.focus();
+                    }}
+                    className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition"
+                    title={`Clique para selecionar ${m.name} e digitar o PIN`}
+                  >
                     <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-600 to-indigo-700 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
                       {m.name[0]}
                     </span>
@@ -289,6 +296,7 @@ export const InitialAccessView: React.FC<InitialAccessViewProps> = ({
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <input
+                      id={'pin-input-' + m.id}
                       type={isVisible ? 'text' : 'password'}
                       inputMode="numeric"
                       maxLength={8}

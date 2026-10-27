@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && rm -rf docs && cp -r dist docs && mkdir -p assets && cp -r dist/assets/* assets/ && cp $(ls dist/assets/index-*.js | head -n 1) assets/app.js && cp $(ls dist/assets/index-*.css | head -n 1) assets/app.css",
     "start": "tsx server.ts",
-    "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },

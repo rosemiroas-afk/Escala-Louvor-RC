@@ -12,20 +12,35 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="LouvorRasgandoCéus" />
     <link rel="manifest" href="./assets/manifest-CCF3ku_V.json" />
     <link rel="icon" type="image/jpeg" href="./assets/logo-igreja-CrwBVXh1.jpg" />
-    <script>
-      // Garante barra final '/' em URLs do GitHub Pages para que o base relativo './' resolva os assets perfeitamente
-      if (window.location.pathname && !window.location.pathname.endsWith('/') && !window.location.pathname.split('/').pop().includes('.')) {
-        window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
-      }
-    </script>
-    <script type="module" crossorigin src="./assets/index-DEFhTaS3.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BdTGrGlq.css">
+    <script type="module" crossorigin src="./assets/index-DVo2zwBp.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-OXbZunl0.css">
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-sky-500 selection:text-white min-h-screen">
     <div id="root"></div>
+    <script>
+      function loadGitHubPagesBundle() {
+        if (!window.__BUNDLE_LOADED__) {
+          window.__BUNDLE_LOADED__ = true;
+          console.warn('[Hospedagem Estática] Carregando bundle compilado...');
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './assets/app.css';
+          document.head.appendChild(link);
+
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.crossOrigin = 'anonymous';
+          s.src = './assets/app.js';
+          document.body.appendChild(s);
+        }
+      }
+      // Se estiver no GitHub Pages (.github.io), carrega o bundle de produção compilado diretamente
+      if (window.location.hostname.endsWith('github.io')) {
+        loadGitHubPagesBundle();
+      }
+    </script>
   </body>
 </html>
 
